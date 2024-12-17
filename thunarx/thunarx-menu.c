@@ -16,14 +16,14 @@
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <glib/gi18n-lib.h>
+#include "thunarx/thunarx-menu-item.h"
+#include "thunarx/thunarx-menu.h"
+#include "thunarx/thunarx-private.h"
 
-#include <thunarx/thunarx-private.h>
-#include <thunarx/thunarx-menu-item.h>
-#include <thunarx/thunarx-menu.h>
+#include <glib/gi18n-lib.h>
 
 
 
@@ -40,7 +40,8 @@
 
 
 
-static void thunarx_menu_finalize (GObject      *object);
+static void
+thunarx_menu_finalize (GObject *object);
 
 
 
@@ -120,10 +121,27 @@ thunarx_menu_append_item (ThunarxMenu *menu, ThunarxMenuItem *item)
 
 
 /**
+ * thunarx_menu_prepend_item:
+ * @menu: a #ThunarxMenu
+ * @item: a #ThunarxMenuItem
+ */
+void
+thunarx_menu_prepend_item (ThunarxMenu *menu, ThunarxMenuItem *item)
+{
+  g_return_if_fail (menu != NULL);
+  g_return_if_fail (item != NULL);
+
+  menu->priv->items = g_list_prepend (menu->priv->items, g_object_ref (item));
+}
+
+
+
+/**
  * thunarx_menu_get_items:
  * @menu: a #ThunarxMenu
  *
  * Returns: (element-type ThunarxMenuItem) (transfer full): the provided #ThunarxMenuItem list
+ * Must be freed with thunarx_menu_item_list_free() after usage
  */
 GList *
 thunarx_menu_get_items (ThunarxMenu *menu)
@@ -133,7 +151,7 @@ thunarx_menu_get_items (ThunarxMenu *menu)
   g_return_val_if_fail (menu != NULL, NULL);
 
   items = g_list_copy (menu->priv->items);
-  g_list_foreach (items, (GFunc) (void (*)(void)) g_object_ref, NULL);
+  g_list_foreach (items, (GFunc) (void (*) (void)) g_object_ref, NULL);
 
   return items;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-export DEB_LDFLAGS_MAINT_APPEND=-Wl,--as-needed -Wl,-O1 -Wl,-z,defs
+export DEB_LDFLAGS_MAINT_APPEND=-Wl,-O1 -Wl,-z,defs
 export DEB_BUILD_MAINT_OPTIONS=hardening=+all
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
@@ -20,14 +20,11 @@ override_dh_auto_configure:
 		--enable-uca-plugin \
 		--enable-introspection=yes
 
-override_dh_install:
-	rm $(CURDIR)/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/*.la
-	rm $(CURDIR)/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/*/*.la
-	rm $(CURDIR)/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/xfce4/panel/plugins/libthunar-tpa.la
-	dh_install
+execute_after_dh_auto_install:
+	find debian/tmp -name '*.la*' -delete
 
-override_dh_missing:
-	dh_missing --fail-missing
+override_dh_installchangelogs:
+	DEB_BUILD_OPTIONS=notrimdch dh_installchangelogs NEWS
 
 override_dh_shlibdeps:
 	dh_shlibdeps -X debian/thunar/usr/lib/$(DEB_HOST_MULTIARCH)/xfce4/panel/plugins/libthunar-tpa.so -- \

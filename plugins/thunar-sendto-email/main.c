@@ -54,13 +54,12 @@
 #include <unistd.h>
 #endif
 
+#include <exo/exo.h>
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
-
 #include <gtk/gtk.h>
-
-#include <exo/exo.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -139,6 +138,7 @@ tse_error (GError      *error,
 
   /* allocate the error dialog */
   dialog = gtk_message_dialog_new (NULL, 0, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s.", primary_text);
+  gtk_window_set_title (GTK_WINDOW (dialog), _("Error"));
   gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog), "%s.", error->message);
 
   /* display the dialog */
@@ -158,20 +158,20 @@ tse_file_is_archive (GFileInfo *file_info)
   const gchar *content_type;
   guint        n;
   /* determine the content type */
-  content_type = g_file_info_get_content_type (file_info);
+  content_type = g_file_info_get_attribute_string (file_info, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE);
   if (content_type == NULL)
-  {
-    return FALSE;
-  }
-  for (n = 0; n < G_N_ELEMENTS (TSE_MIME_TYPES); ++n)
-  {
-    /* check if this mime type matches */
-    if (g_content_type_is_a (content_type, TSE_MIME_TYPES[n]))
     {
-      /* yep, that's a match then */
-      return TRUE;
+      return FALSE;
     }
-  }
+  for (n = 0; n < G_N_ELEMENTS (TSE_MIME_TYPES); ++n)
+    {
+      /* check if this mime type matches */
+      if (g_content_type_is_a (content_type, TSE_MIME_TYPES[n]))
+        {
+          /* yep, that's a match then */
+          return TRUE;
+        }
+    }
   return FALSE;
 }
 
@@ -179,13 +179,13 @@ tse_file_is_archive (GFileInfo *file_info)
 static gint
 tse_ask_compress (GList *infos)
 {
-  TseData     *tse_data;
-  GtkWidget   *message;
-  guint64      total_size = 0;
-  GList       *lp;
-  gint         response = TSE_RESPONSE_PLAIN;
-  gint         n_archives = 0;
-  gint         n_infos = 0;
+  TseData   *tse_data;
+  GtkWidget *message;
+  guint64    total_size = 0;
+  GList     *lp;
+  gint       response = TSE_RESPONSE_PLAIN;
+  gint       n_archives = 0;
+  gint       n_infos = 0;
 
   /* check the file infos */
   for (lp = infos; lp != NULL; lp = lp->next, ++n_infos)
@@ -216,6 +216,7 @@ tse_ask_compress (GList *infos)
           message = gtk_message_dialog_new (NULL, 0, GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE,
                                             _("Send \"%s\" as compressed archive?"),
                                             g_file_info_get_display_name (tse_data->info));
+          gtk_window_set_title (GTK_WINDOW (message), _("Send email"));
           gtk_dialog_add_button (GTK_DIALOG (message), _("_Cancel"), GTK_RESPONSE_CANCEL);
           gtk_dialog_add_button (GTK_DIALOG (message), _("Send _directly"), TSE_RESPONSE_PLAIN);
           gtk_dialog_add_button (GTK_DIALOG (message), _("Send com_pressed"), TSE_RESPONSE_COMPRESS);
@@ -235,6 +236,7 @@ tse_ask_compress (GList *infos)
                                                       "Send %d files as compressed archive?",
                                                       n_infos),
                                             n_infos);
+          gtk_window_set_title (GTK_WINDOW (message), _("Send email"));
           gtk_dialog_add_button (GTK_DIALOG (message), _("_Cancel"), GTK_RESPONSE_CANCEL);
           gtk_dialog_add_button (GTK_DIALOG (message), _("Send _directly"), TSE_RESPONSE_PLAIN);
           gtk_dialog_add_button (GTK_DIALOG (message), _("Send as _archive"), TSE_RESPONSE_COMPRESS);
@@ -259,11 +261,20 @@ tse_child_watch (GPid     pid,
                  gint     status,
                  gpointer user_data)
 {
-  g_object_set_data (G_OBJECT (user_data), I_("tse-child-status"), GINT_TO_POINTER (status));
+  g_object_set_data (G_OBJECT (user_data), I_ ("tse-child-status"), GINT_TO_POINTER (status));
   gtk_dialog_response (GTK_DIALOG (user_data), GTK_RESPONSE_YES);
 }
 
 
+
+static gboolean
+tse_progress_cb (gpointer user_data)
+{
+  GtkWidget *pulse = user_data;
+
+  gtk_progress_bar_pulse (GTK_PROGRESS_BAR (pulse));
+  return TRUE;
+}
 
 static gboolean
 tse_progress (const gchar *working_directory,
@@ -290,7 +301,7 @@ tse_progress (const gchar *working_directory,
   /* allocate the progress dialog */
   dialog = gtk_dialog_new_with_buttons (_("Compressing files..."),
                                         NULL, 0,
-                                        _("_Cancel"), GTK_RESPONSE_CANCEL,
+                                          _("_Cancel"), GTK_RESPONSE_CANCEL,
                                         NULL);
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_CANCEL);
   gtk_window_set_default_size (GTK_WINDOW (dialog), 300, -1);
@@ -328,14 +339,14 @@ tse_progress (const gchar *working_directory,
   watch_id = g_child_watch_add (pid, tse_child_watch, dialog);
 
   /* start the pulse timer */
-  pulse_timer_id = g_timeout_add (125, (GSourceFunc) (void (*)(void)) gtk_progress_bar_pulse, progress);
+  pulse_timer_id = g_timeout_add (125, tse_progress_cb, progress);
 
   /* run the dialog */
   response = gtk_dialog_run (GTK_DIALOG (dialog));
   if (response == GTK_RESPONSE_YES)
     {
       /* check if the command failed */
-      status = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (dialog), I_("tse-child-status")));
+      status = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (dialog), I_ ("tse-child-status")));
       if (!WIFEXITED (status) || WEXITSTATUS (status) != 0)
         {
           /* tell the user that the command failed */
@@ -364,7 +375,7 @@ tse_progress (const gchar *working_directory,
 
 
 #ifndef HAVE_MKDTEMP
-static gchar*
+static gchar *
 mkdtemp (gchar *tmpl)
 {
   static const gchar LETTERS[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -386,7 +397,8 @@ mkdtemp (gchar *tmpl)
     {
       /* fill in the random bits */
       for (j = 0, v = value; j < 6; ++j)
-        tmpl[(len - 6) + j] = LETTERS[v % 62]; v /= 62;
+        tmpl[(len - 6) + j] = LETTERS[v % 62];
+      v /= 62;
 
       /* try to create the directory */
       if (g_mkdir (tmpl, 0700) == 0)
@@ -406,20 +418,20 @@ static gboolean
 tse_compress (GList  *infos,
               gchar **zipfile_return)
 {
-  TseData       *tse_data;
-  gboolean       succeed = TRUE;
-  GError        *error = NULL;
-  GFile         *parent;
-  GFile         *parent_parent;
-  gchar        **argv;
-  gchar         *base_name;
-  gchar         *zipfile;
-  gchar         *tmppath;
-  gchar         *tmpdir;
-  gchar         *path;
-  gchar         *dot;
-  GList         *lp;
-  gint           n;
+  TseData *tse_data;
+  gboolean succeed = TRUE;
+  GError  *error = NULL;
+  GFile   *parent;
+  GFile   *parent_parent;
+  gchar  **argv;
+  gchar   *base_name;
+  gchar   *zipfile;
+  gchar   *tmppath;
+  gchar   *tmpdir;
+  gchar   *path;
+  gchar   *dot;
+  GList   *lp;
+  gint     n;
 
   /* create a temporary directory */
   tmpdir = g_strdup ("/tmp/thunar-sendto-email.XXXXXX");
@@ -524,9 +536,7 @@ tse_compress (GList  *infos,
           if (G_LIKELY (error != NULL))
             {
               /* tell the user that we failed to compress the file(s) */
-              tse_error (error, ngettext ("Failed to compress %d file",
-                                          "Failed to compress %d files",
-                                          g_list_length (infos)),
+              tse_error (error, ngettext ("Failed to compress %d file", "Failed to compress %d files", g_list_length (infos)),
                          g_list_length (infos));
               g_error_free (error);
             }
@@ -557,18 +567,18 @@ tse_compress (GList  *infos,
 int
 main (int argc, char **argv)
 {
-  GFileInfo     *info;
-  TseData       *tse_data;
-  GFile         *file;
-  GFile         *parent;
-  GString       *mailto;
-  GError        *error = NULL;
-  GList         *infos = NULL;
-  gchar        **attachments = NULL;
-  gchar         *zipfile = NULL;
-  GList         *lp;
-  gint           response;
-  gint           n;
+  GFileInfo *info;
+  TseData   *tse_data;
+  GFile     *file;
+  GFile     *parent;
+  GString   *mailto;
+  GError    *error = NULL;
+  GList     *infos = NULL;
+  gchar    **attachments = NULL;
+  gchar     *zipfile = NULL;
+  GList     *lp;
+  gint       response;
+  gint       n;
 
   /* setup translation domain */
   xfce_textdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR, "UTF-8");
@@ -616,10 +626,7 @@ main (int argc, char **argv)
 
       /* try to determine the info */
       info = g_file_query_info (file,
-                                G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME ","
-                                G_FILE_ATTRIBUTE_STANDARD_SIZE ","
-                                G_FILE_ATTRIBUTE_STANDARD_TYPE ","
-                                G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
+                                G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME "," G_FILE_ATTRIBUTE_STANDARD_SIZE "," G_FILE_ATTRIBUTE_STANDARD_TYPE "," G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
                                 G_FILE_QUERY_INFO_NONE, NULL, &error);
 
       /* check if we failed */
@@ -696,4 +703,3 @@ main (int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
-

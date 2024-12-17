@@ -19,16 +19,16 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-progress-dialog.h"
+#include "thunar/thunar-progress-view.h"
+#include "thunar/thunar-transfer-job.h"
+
 #include <gtk/gtk.h>
-
 #include <libxfce4ui/libxfce4ui.h>
-
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-progress-dialog.h>
-#include <thunar/thunar-progress-view.h>
 
 
 
@@ -36,14 +36,14 @@
 
 
 
-static void     thunar_progress_dialog_dispose            (GObject              *object);
-static void     thunar_progress_dialog_finalize           (GObject              *object);
-static void     thunar_progress_dialog_shown              (ThunarProgressDialog *dialog);
-static gboolean thunar_progress_dialog_closed             (ThunarProgressDialog *dialog);
-static gboolean thunar_progress_dialog_toggled            (ThunarProgressDialog *dialog,
-                                                           GdkEventButton       *button,
-                                                           GtkStatusIcon        *status_icon);
-static void     thunar_progress_dialog_update_status_icon (ThunarProgressDialog *dialog);
+static void
+thunar_progress_dialog_dispose (GObject *object);
+static void
+thunar_progress_dialog_finalize (GObject *object);
+static gboolean
+thunar_progress_dialog_closed (ThunarProgressDialog *dialog);
+static gint
+thunar_progress_dialog_n_views (ThunarProgressDialog *dialog);
 
 
 
@@ -54,17 +54,19 @@ struct _ThunarProgressDialogClass
 
 struct _ThunarProgressDialog
 {
-  GtkWindow      __parent__;
+  GtkWindow __parent__;
 
-  GtkStatusIcon *status_icon;
-  GtkWidget     *scrollwin;
-  GtkWidget     *vbox;
-  GtkWidget     *content_box;
+  GtkWidget *scrollwin;
+  GtkWidget *vbox;
+  GtkWidget *content_box;
 
-  GList         *views;
+  /* List of running views, type ThunarProgressView */
+  GList *views;
+  /* List of waiting views, type ThunarProgressView */
+  GList *views_waiting;
 
-  gint           x;
-  gint           y;
+  gint x;
+  gint y;
 };
 
 
@@ -92,16 +94,14 @@ static void
 thunar_progress_dialog_init (ThunarProgressDialog *dialog)
 {
   dialog->views = NULL;
+  dialog->views_waiting = NULL;
 
   gtk_window_set_title (GTK_WINDOW (dialog), _("File Operation Progress"));
   gtk_window_set_default_size (GTK_WINDOW (dialog), 450, 10);
   gtk_window_set_modal (GTK_WINDOW (dialog), FALSE);
-  gtk_window_set_transient_for (GTK_WINDOW (dialog), NULL);
   gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), FALSE);
   gtk_window_set_type_hint (GTK_WINDOW (dialog), GDK_WINDOW_TYPE_HINT_DIALOG);
-
-  g_signal_connect_swapped (dialog, "show",
-                            G_CALLBACK (thunar_progress_dialog_shown), dialog);
+  gtk_window_set_focus_on_map (GTK_WINDOW (dialog), FALSE);
 
   g_signal_connect (dialog, "delete-event",
                     G_CALLBACK (thunar_progress_dialog_closed), dialog);
@@ -131,40 +131,11 @@ thunar_progress_dialog_finalize (GObject *object)
 {
   ThunarProgressDialog *dialog = THUNAR_PROGRESS_DIALOG (object);
 
-  /* destroy the status icon */
-  if (dialog->status_icon != NULL)
-    {
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      gtk_status_icon_set_visible (dialog->status_icon, FALSE);
-G_GNUC_END_IGNORE_DEPRECATIONS
-      g_object_unref (dialog->status_icon);
-    }
-
   /* free the view list */
   g_list_free (dialog->views);
+  g_list_free (dialog->views_waiting);
 
   (*G_OBJECT_CLASS (thunar_progress_dialog_parent_class)->finalize) (object);
-}
-
-
-
-static void
-thunar_progress_dialog_shown (ThunarProgressDialog *dialog)
-{
-  _thunar_return_if_fail (THUNAR_IS_PROGRESS_DIALOG (dialog));
-
-  /* show the status icon */
-  if (dialog->status_icon == NULL)
-    {
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      dialog->status_icon = gtk_status_icon_new_from_icon_name ("edit-copy");
-G_GNUC_END_IGNORE_DEPRECATIONS
-
-      thunar_progress_dialog_update_status_icon (dialog);
-      g_signal_connect_swapped (dialog->status_icon, "button-press-event",
-                                G_CALLBACK (thunar_progress_dialog_toggled),
-                                GTK_WIDGET (dialog));
-    }
 }
 
 
@@ -186,38 +157,15 @@ thunar_progress_dialog_closed (ThunarProgressDialog *dialog)
 
 
 
-static gboolean
-thunar_progress_dialog_toggled (ThunarProgressDialog *dialog,
-                                GdkEventButton       *event,
-                                GtkStatusIcon        *status_icon)
+static gint
+thunar_progress_dialog_n_views (ThunarProgressDialog *dialog)
 {
-  _thunar_return_val_if_fail (THUNAR_IS_PROGRESS_DIALOG (dialog), FALSE);
-  _thunar_return_val_if_fail (GTK_IS_STATUS_ICON (status_icon), FALSE);
+  gint n_views;
 
-  /* check if the window is visible and has the focus */
-  if (gtk_widget_get_visible (GTK_WIDGET (dialog))
-      && gtk_window_is_active (GTK_WINDOW (dialog)))
-    {
-      /* remember the position of the dialog */
-      gtk_window_get_position (GTK_WINDOW (dialog), &dialog->x, &dialog->y);
+  n_views = g_list_length (dialog->views);
+  n_views += g_list_length (dialog->views_waiting);
 
-      /* it is, so hide it now */
-      gtk_widget_hide (GTK_WIDGET (dialog));
-    }
-  else
-    {
-      /* check if the dialog is invisible */
-      if (!gtk_widget_get_visible (GTK_WIDGET (dialog)))
-        {
-          /* restore its previous position before presenting it */
-          gtk_window_move (GTK_WINDOW (dialog), dialog->x, dialog->y);
-        }
-
-      /* it's not, so we need to raise it above other windows */
-      gtk_window_present_with_time (GTK_WINDOW (dialog), event->time);
-    }
-
-  return TRUE;
+  return n_views;
 }
 
 
@@ -238,6 +186,74 @@ thunar_progress_dialog_view_needs_attention (ThunarProgressDialog *dialog,
 
 
 static void
+thunar_progress_dialog_launch_view (ThunarProgressDialog *dialog,
+                                    ThunarProgressView   *view)
+{
+  GValue title = {
+    0,
+  };
+  GList *view_lp;
+
+  _thunar_return_if_fail (THUNAR_IS_PROGRESS_DIALOG (dialog));
+  _thunar_return_if_fail (THUNAR_IS_PROGRESS_VIEW (view));
+
+  view_lp = g_list_find (dialog->views_waiting, view);
+  if (view_lp != NULL)
+    {
+      dialog->views_waiting = g_list_remove_link (dialog->views_waiting, view_lp);
+      dialog->views = g_list_concat (view_lp, dialog->views);
+      thunar_progress_view_launch_job (THUNAR_PROGRESS_VIEW (view_lp->data));
+    }
+  else
+    {
+      g_value_init (&title, G_TYPE_STRING);
+      g_object_get_property (G_OBJECT (view), "title", &title);
+      g_info ("Job \"%s\" does not exist in waiting list",
+              (gchar *) g_value_get_string (&title));
+    }
+}
+
+
+
+static void
+launch_waiting_jobs (ThunarProgressDialog *dialog)
+{
+  gboolean           launched = FALSE;
+  GList             *lp = NULL;
+  GList             *next = NULL;
+  GList             *job_list;
+  ThunarTransferJob *transfer_job;
+
+  lp = dialog->views_waiting;
+  if (lp == NULL)
+    return;
+  job_list = thunar_progress_dialog_list_jobs (dialog);
+  while (lp != NULL)
+    {
+      next = lp->next;
+      transfer_job = THUNAR_TRANSFER_JOB (thunar_progress_view_get_job (THUNAR_PROGRESS_VIEW (lp->data)));
+      if (thunar_transfer_job_can_start (transfer_job, job_list))
+        {
+          launched = TRUE;
+
+          /* Move the view to the running list, and then launch a job */
+          dialog->views_waiting = g_list_remove_link (dialog->views_waiting, lp);
+          dialog->views = g_list_concat (lp, dialog->views);
+          thunar_progress_view_launch_job (THUNAR_PROGRESS_VIEW (lp->data));
+
+          job_list = g_list_prepend (job_list, thunar_progress_view_get_job (THUNAR_PROGRESS_VIEW (lp->data)));
+        }
+      lp = next;
+    }
+  g_list_free (job_list);
+
+  if (launched == FALSE)
+    g_warning ("Waiting jobs cannot be launched");
+}
+
+
+
+static void
 thunar_progress_dialog_job_finished (ThunarProgressDialog *dialog,
                                      ThunarProgressView   *view)
 {
@@ -248,23 +264,20 @@ thunar_progress_dialog_job_finished (ThunarProgressDialog *dialog,
 
   /* remove the view from the list */
   dialog->views = g_list_remove (dialog->views, view);
+  dialog->views_waiting = g_list_remove (dialog->views_waiting, view);
 
   /* destroy the widget */
   gtk_widget_destroy (GTK_WIDGET (view));
 
   /* determine the number of views left */
-  n_views = g_list_length (dialog->views);
+  n_views = thunar_progress_dialog_n_views (dialog);
 
   /* check if we've just removed the 4th view and are now left with
    * SCROLLVIEW_THRESHOLD-1 of them, in which case we drop the scroll window */
-  if (n_views == SCROLLVIEW_THRESHOLD-1)
+  if (n_views == SCROLLVIEW_THRESHOLD - 1)
     {
       /* reparent the content box */
-#if LIBXFCE4UI_CHECK_VERSION (4, 13, 2)
       xfce_widget_reparent (dialog->content_box, dialog->vbox);
-#else
-      gtk_widget_reparent (dialog->content_box, dialog->vbox);
-#endif
 
       /* destroy the scroll win */
       gtk_widget_destroy (dialog->scrollwin);
@@ -278,14 +291,9 @@ thunar_progress_dialog_job_finished (ThunarProgressDialog *dialog,
       gtk_window_resize (GTK_WINDOW (dialog), 450, 10);
     }
 
-  /* check if we still have at least one view */
-  if (dialog->views != NULL)
-    {
-      /* update the status icon */
-      if (dialog->status_icon != NULL)
-        thunar_progress_dialog_update_status_icon (dialog);
-    }
-  else
+  launch_waiting_jobs (dialog);
+
+  if (!thunar_progress_dialog_has_jobs (dialog))
     {
       /* destroy the dialog as there are no views left */
       gtk_widget_destroy (GTK_WIDGET (dialog));
@@ -294,39 +302,7 @@ thunar_progress_dialog_job_finished (ThunarProgressDialog *dialog,
 
 
 
-static void
-thunar_progress_dialog_update_status_icon (ThunarProgressDialog *dialog)
-{
-  gchar *tooltip_text;
-  guint  n_views;
-
-  _thunar_return_if_fail (THUNAR_IS_PROGRESS_DIALOG (dialog));
-  _thunar_return_if_fail (GTK_IS_STATUS_ICON (dialog->status_icon));
-
-  /* determine the number of views now being active */
-  n_views = g_list_length (dialog->views);
-
-  /* build the tooltip text */
-  tooltip_text = g_strdup_printf (ngettext ("%d file operation running",
-                                            "%d file operations running",
-                                            n_views),
-                                            n_views);
-
-  /* update the tooltip */
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-  gtk_status_icon_set_tooltip_text (dialog->status_icon, tooltip_text);
-G_GNUC_END_IGNORE_DEPRECATIONS
-
-  /* free the string */
-  g_free (tooltip_text);
-}
-
-
-
-
-
-
-GtkWidget*
+GtkWidget *
 thunar_progress_dialog_new (void)
 {
   return g_object_new (THUNAR_TYPE_PROGRESS_DIALOG, NULL);
@@ -378,6 +354,7 @@ thunar_progress_dialog_add_job (ThunarProgressDialog *dialog,
 {
   GtkWidget *viewport;
   GtkWidget *view;
+  GList     *job_list;
 
   _thunar_return_if_fail (THUNAR_IS_PROGRESS_DIALOG (dialog));
   _thunar_return_if_fail (THUNAR_IS_JOB (job));
@@ -393,12 +370,23 @@ thunar_progress_dialog_add_job (ThunarProgressDialog *dialog,
   if (dialog->views == NULL)
     gtk_window_set_icon_name (GTK_WINDOW (dialog), icon_name);
 
-  /* add the view to the list of known views */
-  dialog->views = g_list_prepend (dialog->views, view);
+  /* Check if the job can start */
+  job_list = thunar_progress_dialog_list_jobs (dialog);
+  if (!THUNAR_IS_TRANSFER_JOB (job)
+      || thunar_transfer_job_can_start (THUNAR_TRANSFER_JOB (job), job_list))
+    {
+      dialog->views = g_list_append (dialog->views, view);
+      thunar_progress_view_launch_job (THUNAR_PROGRESS_VIEW (view));
+    }
+  else
+    {
+      dialog->views_waiting = g_list_append (dialog->views_waiting, view);
+    }
+  g_list_free (job_list);
 
   /* check if we need to wrap the views in a scroll window (starting
    * at SCROLLVIEW_THRESHOLD parallel operations */
-  if (g_list_length (dialog->views) == SCROLLVIEW_THRESHOLD)
+  if (thunar_progress_dialog_n_views (dialog) == SCROLLVIEW_THRESHOLD)
     {
       /* create a scrolled window and add it to the dialog */
       dialog->scrollwin = gtk_scrolled_window_new (NULL, NULL);
@@ -416,11 +404,7 @@ thunar_progress_dialog_add_job (ThunarProgressDialog *dialog,
       gtk_widget_show (viewport);
 
       /* move the content box into the viewport */
-#if LIBXFCE4UI_CHECK_VERSION (4, 13, 2)
       xfce_widget_reparent (dialog->content_box, viewport);
-#else
-      gtk_widget_reparent (dialog->content_box, viewport);
-#endif
     }
 
   g_signal_connect_swapped (view, "need-attention",
@@ -429,11 +413,8 @@ thunar_progress_dialog_add_job (ThunarProgressDialog *dialog,
   g_signal_connect_swapped (view, "finished",
                             G_CALLBACK (thunar_progress_dialog_job_finished), dialog);
 
-  g_signal_connect_swapped (job, "ask-jobs",
-                            G_CALLBACK (thunar_progress_dialog_list_jobs), dialog);
-
-  if (dialog->status_icon != NULL)
-    thunar_progress_dialog_update_status_icon (dialog);
+  g_signal_connect_swapped (view, "force-launch",
+                            G_CALLBACK (thunar_progress_dialog_launch_view), dialog);
 }
 
 
@@ -441,6 +422,20 @@ thunar_progress_dialog_add_job (ThunarProgressDialog *dialog,
 gboolean
 thunar_progress_dialog_has_jobs (ThunarProgressDialog *dialog)
 {
+  gboolean has_jobs;
   _thunar_return_val_if_fail (THUNAR_IS_PROGRESS_DIALOG (dialog), FALSE);
-  return dialog->views != NULL;
+
+  has_jobs = (dialog->views != NULL) || (dialog->views_waiting != NULL);
+
+  return has_jobs;
+}
+
+
+
+guint
+thunar_progress_dialog_n_jobs (ThunarProgressDialog *dialog)
+{
+  _thunar_return_val_if_fail (THUNAR_IS_PROGRESS_DIALOG (dialog), FALSE);
+
+  return g_list_length (dialog->views) + g_list_length (dialog->views_waiting);
 }

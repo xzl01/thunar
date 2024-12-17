@@ -20,16 +20,17 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunarx/thunarx.h>
+#include "thunar/thunar-application.h"
+#include "thunar/thunar-dialogs.h"
+#include "thunar/thunar-dnd.h"
+#include "thunar/thunar-gtk-extensions.h"
+#include "thunar/thunar-private.h"
+#include "thunarx/thunarx.h"
 
-#include <thunar/thunar-application.h>
-#include <thunar/thunar-dialogs.h>
-#include <thunar/thunar-dnd.h>
-#include <thunar/thunar-gtk-extensions.h>
-#include <thunar/thunar-private.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -67,8 +68,8 @@ thunar_dnd_ask (GtkWidget    *widget,
                 GdkDragAction dnd_actions)
 {
   static const GdkDragAction dnd_action_items[] = { GDK_ACTION_COPY, GDK_ACTION_MOVE, GDK_ACTION_LINK };
-  static const gchar        *dnd_action_names[] = { N_ ("_Copy here"), N_ ("_Move here"), N_ ("_Link here") };
-  static const gchar        *dnd_action_icons[] = { "stock_folder-copy", "stock_folder-move", NULL };
+  static const gchar        *dnd_action_names[] = { N_ ("Copy _Here"), N_ ("_Move Here"), N_ ("_Link Here") };
+  static const gchar        *dnd_action_icons[] = { "stock_folder-copy", "stock_folder-move", "insert-link" };
 
   ThunarxProviderFactory *factory;
   GdkDragAction           dnd_action = 0;
@@ -96,10 +97,10 @@ thunar_dnd_ask (GtkWidget    *widget,
   for (n = 0; n < G_N_ELEMENTS (dnd_action_items); ++n)
     if (G_LIKELY ((dnd_actions & dnd_action_items[n]) != 0))
       {
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+        G_GNUC_BEGIN_IGNORE_DEPRECATIONS
         item = gtk_image_menu_item_new_with_mnemonic (_(dnd_action_names[n]));
-G_GNUC_END_IGNORE_DEPRECATIONS
-        g_object_set_data (G_OBJECT (item), I_("dnd-action"), GUINT_TO_POINTER (dnd_action_items[n]));
+        G_GNUC_END_IGNORE_DEPRECATIONS
+        g_object_set_data (G_OBJECT (item), I_ ("dnd-action"), GUINT_TO_POINTER (dnd_action_items[n]));
         g_signal_connect (G_OBJECT (item), "activate", G_CALLBACK (dnd_action_selected), &dnd_action);
         gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
         gtk_widget_show (item);
@@ -108,9 +109,9 @@ G_GNUC_END_IGNORE_DEPRECATIONS
         if (G_LIKELY (dnd_action_icons[n] != NULL))
           {
             image = gtk_image_new_from_icon_name (dnd_action_icons[n], GTK_ICON_SIZE_MENU);
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+            G_GNUC_BEGIN_IGNORE_DEPRECATIONS
             gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item), image);
-G_GNUC_END_IGNORE_DEPRECATIONS
+            G_GNUC_END_IGNORE_DEPRECATIONS
           }
       }
 
@@ -166,7 +167,11 @@ G_GNUC_END_IGNORE_DEPRECATIONS
     }
 
   /* append the cancel item */
-  item = gtk_menu_item_new_with_mnemonic (_("_Cancel"));
+  image = gtk_image_new_from_icon_name ("gtk-cancel", GTK_ICON_SIZE_MENU);
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  item = gtk_image_menu_item_new_with_mnemonic (_("_Cancel"));
+  gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item), image);
+  G_GNUC_END_IGNORE_DEPRECATIONS
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
   gtk_widget_show (item);
 
@@ -209,6 +214,7 @@ thunar_dnd_perform (GtkWidget    *widget,
 {
   ThunarApplication *application;
   gboolean           succeed = TRUE;
+  gboolean           ask_execute = FALSE;
   GError            *error = NULL;
 
   _thunar_return_val_if_fail (GTK_IS_WIDGET (widget), FALSE);
@@ -225,29 +231,45 @@ thunar_dnd_perform (GtkWidget    *widget,
       switch (action)
         {
         case GDK_ACTION_COPY:
-          thunar_application_copy_into (application, widget, file_list, thunar_file_get_file (file), new_files_closure);
+          thunar_application_copy_into (application, widget, file_list, thunar_file_get_file (file), THUNAR_OPERATION_LOG_OPERATIONS, new_files_closure);
           break;
 
         case GDK_ACTION_MOVE:
-          thunar_application_move_into (application, widget, file_list, thunar_file_get_file (file), new_files_closure);
+          thunar_application_move_into (application, widget, file_list, thunar_file_get_file (file), THUNAR_OPERATION_LOG_OPERATIONS, new_files_closure);
           break;
 
         case GDK_ACTION_LINK:
-          thunar_application_link_into (application, widget, file_list, thunar_file_get_file (file), new_files_closure);
+          thunar_application_link_into (application, widget, file_list, thunar_file_get_file (file), THUNAR_OPERATION_LOG_OPERATIONS, new_files_closure);
           break;
 
         default:
           succeed = FALSE;
         }
     }
-  else if (thunar_file_is_executable (file))
+  else if (thunar_file_can_execute (file, &ask_execute))
     {
-      /* TODO any chance to determine the working dir here? */
-      succeed = thunar_file_execute (file, NULL, widget, file_list, NULL, &error);
+      gboolean in_terminal = FALSE;
+      gint     ask_execute_response = THUNAR_FILE_ASK_EXECUTE_RESPONSE_RUN;
+
+      if (ask_execute)
+        {
+          ask_execute_response = thunar_dialog_ask_execute (file, widget, FALSE, TRUE);
+          if (ask_execute_response == THUNAR_FILE_ASK_EXECUTE_RESPONSE_RUN_IN_TERMINAL)
+            in_terminal = TRUE;
+        }
+
+      if (ask_execute_response == THUNAR_FILE_ASK_EXECUTE_RESPONSE_RUN_IN_TERMINAL || ask_execute_response == THUNAR_FILE_ASK_EXECUTE_RESPONSE_RUN)
+        {
+          /* TODO any chance to determine the working dir here? */
+          succeed = thunar_file_execute (file, NULL, widget, in_terminal, file_list, NULL, &error);
+        }
       if (G_UNLIKELY (!succeed))
         {
           /* display an error to the user */
-          thunar_dialogs_show_error (widget, error, _("Failed to execute file \"%s\""), thunar_file_get_display_name (file));
+          if (g_strcmp0 (thunar_file_get_display_name (file), thunar_file_get_basename (file)) != 0)
+            thunar_dialogs_show_error (widget, error, _("Failed to execute file \"%s\" (%s)"), thunar_file_get_display_name (file), thunar_file_get_basename (file));
+          else
+            thunar_dialogs_show_error (widget, error, _("Failed to execute file \"%s\""), thunar_file_get_display_name (file));
 
           /* release the error */
           g_error_free (error);
@@ -263,6 +285,3 @@ thunar_dnd_perform (GtkWidget    *widget,
 
   return succeed;
 }
-
-
-

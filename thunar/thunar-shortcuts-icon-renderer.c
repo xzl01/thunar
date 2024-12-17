@@ -19,17 +19,17 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <gio/gio.h>
+#include "thunar/thunar-device.h"
+#include "thunar/thunar-gdk-extensions.h"
+#include "thunar/thunar-gio-extensions.h"
+#include "thunar/thunar-gobject-extensions.h"
+#include "thunar/thunar-icon-factory.h"
+#include "thunar/thunar-shortcuts-icon-renderer.h"
 
-#include <thunar/thunar-gio-extensions.h>
-#include <thunar/thunar-gobject-extensions.h>
-#include <thunar/thunar-gdk-extensions.h>
-#include <thunar/thunar-icon-factory.h>
-#include <thunar/thunar-shortcuts-icon-renderer.h>
-#include <thunar/thunar-device.h>
+#include <gio/gio.h>
 
 
 
@@ -43,21 +43,25 @@ enum
 
 
 
-static void thunar_shortcuts_icon_renderer_finalize     (GObject                          *object);
-static void thunar_shortcuts_icon_renderer_get_property (GObject                          *object,
-                                                         guint                             prop_id,
-                                                         GValue                           *value,
-                                                         GParamSpec                       *pspec);
-static void thunar_shortcuts_icon_renderer_set_property (GObject                          *object,
-                                                         guint                             prop_id,
-                                                         const GValue                     *value,
-                                                         GParamSpec                       *pspec);
-static void thunar_shortcuts_icon_renderer_render       (GtkCellRenderer                  *renderer,
-                                                         cairo_t                          *cr,
-                                                         GtkWidget                        *widget,
-                                                         const GdkRectangle               *background_area,
-                                                         const GdkRectangle               *cell_area,
-                                                         GtkCellRendererState              flags);
+static void
+thunar_shortcuts_icon_renderer_finalize (GObject *object);
+static void
+thunar_shortcuts_icon_renderer_get_property (GObject    *object,
+                                             guint       prop_id,
+                                             GValue     *value,
+                                             GParamSpec *pspec);
+static void
+thunar_shortcuts_icon_renderer_set_property (GObject      *object,
+                                             guint         prop_id,
+                                             const GValue *value,
+                                             GParamSpec   *pspec);
+static void
+thunar_shortcuts_icon_renderer_render (GtkCellRenderer     *renderer,
+                                       cairo_t             *cr,
+                                       GtkWidget           *widget,
+                                       const GdkRectangle  *background_area,
+                                       const GdkRectangle  *cell_area,
+                                       GtkCellRendererState flags);
 
 
 
@@ -70,8 +74,8 @@ struct _ThunarShortcutsIconRenderer
 {
   ThunarIconRenderer __parent__;
 
-  ThunarDevice      *device;
-  GIcon             *gicon;
+  ThunarDevice *device;
+  GIcon        *gicon;
 };
 
 
@@ -212,6 +216,8 @@ thunar_shortcuts_icon_renderer_render (GtkCellRenderer     *renderer,
 {
   ThunarShortcutsIconRenderer *shortcuts_icon_renderer = THUNAR_SHORTCUTS_ICON_RENDERER (renderer);
   GtkIconTheme                *icon_theme;
+  GtkIconLookupFlags           lookup_flags;
+  GtkStyleContext             *context;
   GdkRectangle                 icon_area;
   GdkRectangle                 clip_area;
   GtkIconInfo                 *icon_info;
@@ -219,14 +225,18 @@ thunar_shortcuts_icon_renderer_render (GtkCellRenderer     *renderer,
   GdkPixbuf                   *temp;
   GIcon                       *gicon;
   gdouble                      alpha;
+  gint                         scale_factor;
+  gboolean                     use_symbolic_icons;
 
   if (!gdk_cairo_get_clip_rectangle (cr, &clip_area))
     return;
 
-  /* check if we have a volume set */
+  /* check if we have a gicon or volume set */
   if (G_UNLIKELY (shortcuts_icon_renderer->gicon != NULL
-      ||  shortcuts_icon_renderer->device != NULL))
+                  || shortcuts_icon_renderer->device != NULL))
     {
+      use_symbolic_icons = THUNAR_ICON_RENDERER (renderer)->use_symbolic_icons;
+
       /* load the volume icon */
       icon_theme = gtk_icon_theme_get_for_screen (gtk_widget_get_screen (widget));
 
@@ -234,17 +244,31 @@ thunar_shortcuts_icon_renderer_render (GtkCellRenderer     *renderer,
       if (shortcuts_icon_renderer->gicon != NULL)
         gicon = g_object_ref (shortcuts_icon_renderer->gicon);
       else
-        gicon = thunar_device_get_icon (shortcuts_icon_renderer->device);
+        gicon = thunar_device_get_icon (shortcuts_icon_renderer->device, use_symbolic_icons);
 
-      icon_info = gtk_icon_theme_lookup_by_gicon (icon_theme, gicon, cell_area->width,
-                                                  GTK_ICON_LOOKUP_USE_BUILTIN |
-                                                  GTK_ICON_LOOKUP_FORCE_SIZE);
+      scale_factor = gtk_widget_get_scale_factor (widget);
+
+      lookup_flags = GTK_ICON_LOOKUP_USE_BUILTIN | GTK_ICON_LOOKUP_FORCE_SIZE;
+      if (use_symbolic_icons)
+        lookup_flags |= GTK_ICON_LOOKUP_FORCE_SYMBOLIC;
+
+      icon_info = gtk_icon_theme_lookup_by_gicon_for_scale (icon_theme, gicon, cell_area->width,
+                                                            scale_factor, lookup_flags);
       g_object_unref (gicon);
 
       /* try to load the icon */
       if (G_LIKELY (icon_info != NULL))
         {
-          icon = gtk_icon_info_load_icon (icon_info, NULL);
+          if (use_symbolic_icons)
+            {
+              context = gtk_widget_get_style_context (widget);
+
+              /* load symbolic icon that matches the theme */
+              icon = gtk_icon_info_load_symbolic_for_context (icon_info, context, NULL, NULL);
+            }
+          else
+            icon = gtk_icon_info_load_icon (icon_info, NULL);
+
           g_object_unref (icon_info);
         }
 
@@ -252,20 +276,20 @@ thunar_shortcuts_icon_renderer_render (GtkCellRenderer     *renderer,
       if (G_LIKELY (icon != NULL))
         {
           /* determine the real icon size */
-          icon_area.width = gdk_pixbuf_get_width (icon);
-          icon_area.height = gdk_pixbuf_get_height (icon);
+          icon_area.width = gdk_pixbuf_get_width (icon) / scale_factor;
+          icon_area.height = gdk_pixbuf_get_height (icon) / scale_factor;
 
           /* scale down the icon on-demand */
           if (G_UNLIKELY (icon_area.width > cell_area->width || icon_area.height > cell_area->height))
             {
               /* scale down to fit */
-              temp = exo_gdk_pixbuf_scale_down (icon, TRUE, MAX (1, cell_area->width), MAX (1, cell_area->height));
+              temp = exo_gdk_pixbuf_scale_down (icon, TRUE, MAX (1, cell_area->width * scale_factor), MAX (1, cell_area->height * scale_factor));
               g_object_unref (G_OBJECT (icon));
               icon = temp;
 
               /* determine the icon dimensions again */
-              icon_area.width = gdk_pixbuf_get_width (icon);
-              icon_area.height = gdk_pixbuf_get_height (icon);
+              icon_area.width = gdk_pixbuf_get_width (icon) / scale_factor;
+              icon_area.height = gdk_pixbuf_get_height (icon) / scale_factor;
             }
 
           /* 50% translucent for unmounted volumes */
@@ -282,7 +306,7 @@ thunar_shortcuts_icon_renderer_render (GtkCellRenderer     *renderer,
           if (gdk_rectangle_intersect (&clip_area, &icon_area, NULL))
             {
               /* render the invalid parts of the icon */
-              thunar_gdk_cairo_set_source_pixbuf (cr, icon, icon_area.x, icon_area.y);
+              thunar_gdk_cairo_set_source_pixbuf (cr, icon, icon_area.x, icon_area.y, scale_factor);
               cairo_paint_with_alpha (cr, alpha);
             }
 
@@ -307,9 +331,8 @@ thunar_shortcuts_icon_renderer_render (GtkCellRenderer     *renderer,
  *
  * Return value: the newly allocated #ThunarShortcutsIconRenderer.
  **/
-GtkCellRenderer*
+GtkCellRenderer *
 thunar_shortcuts_icon_renderer_new (void)
 {
   return g_object_new (THUNAR_TYPE_SHORTCUTS_ICON_RENDERER, NULL);
 }
-

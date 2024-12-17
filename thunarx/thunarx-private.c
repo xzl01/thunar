@@ -19,7 +19,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -29,7 +29,7 @@
 #include <string.h>
 #endif
 
-#include <thunarx/thunarx-private.h>
+#include "thunarx/thunarx-private.h"
 
 
 
@@ -40,7 +40,7 @@ static GQuark thunarx_object_list_quark = 0;
 /**
  * thunarx_object_list_take_reference:
  * @object_list: (element-type GObject): a #GList of #GObject<!---->s.
- * 
+ *
  * takes a reference on target for each object in object_list
  **/
 void
@@ -63,7 +63,7 @@ thunarx_object_list_take_reference (GList   *object_list,
 
 
 /* Returns the option name for the param spec, used by thunarx_renamer_real_load/save() */
-gchar*
+gchar *
 thunarx_param_spec_get_option_name (GParamSpec *pspec)
 {
   const gchar *s;

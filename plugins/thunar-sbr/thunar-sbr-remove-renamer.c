@@ -23,7 +23,6 @@
 #endif
 
 #include <exo/exo.h>
-
 #include <thunar-sbr/thunar-sbr-remove-renamer.h>
 
 
@@ -40,20 +39,25 @@ enum
 
 
 
-static void   thunar_sbr_remove_renamer_get_property  (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       GValue                       *value,
-                                                       GParamSpec                   *pspec);
-static void   thunar_sbr_remove_renamer_set_property  (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       const GValue                 *value,
-                                                       GParamSpec                   *pspec);
-static void   thunar_sbr_remove_renamer_realize       (GtkWidget                    *widget);
-static gchar *thunar_sbr_remove_renamer_process       (ThunarxRenamer               *renamer,
-                                                       ThunarxFileInfo              *file,
-                                                       const gchar                  *text,
-                                                       guint                         idx);
-static void   thunar_sbr_remove_renamer_update        (ThunarSbrRemoveRenamer       *remove_renamer);
+static void
+thunar_sbr_remove_renamer_get_property (GObject    *object,
+                                        guint       prop_id,
+                                        GValue     *value,
+                                        GParamSpec *pspec);
+static void
+thunar_sbr_remove_renamer_set_property (GObject      *object,
+                                        guint         prop_id,
+                                        const GValue *value,
+                                        GParamSpec   *pspec);
+static void
+thunar_sbr_remove_renamer_realize (GtkWidget *widget);
+static gchar *
+thunar_sbr_remove_renamer_process (ThunarxRenamer  *renamer,
+                                   ThunarxFileInfo *file,
+                                   const gchar     *text,
+                                   guint            idx);
+static void
+thunar_sbr_remove_renamer_update (ThunarSbrRemoveRenamer *remove_renamer);
 
 
 
@@ -189,7 +193,7 @@ thunar_sbr_remove_renamer_init (ThunarSbrRemoveRenamer *remove_renamer)
   gtk_widget_show (remove_renamer->start_spinner);
 
   adjustment = gtk_spin_button_get_adjustment (GTK_SPIN_BUTTON (remove_renamer->start_spinner));
-  exo_mutual_binding_new (G_OBJECT (remove_renamer), "start-offset", G_OBJECT (adjustment), "value");
+  g_object_bind_property (G_OBJECT (remove_renamer), "start-offset", G_OBJECT (adjustment), "value", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
 
   /* set Atk label relation for the entry */
   object = gtk_widget_get_accessible (remove_renamer->start_spinner);
@@ -197,12 +201,13 @@ thunar_sbr_remove_renamer_init (ThunarSbrRemoveRenamer *remove_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   combo = gtk_combo_box_text_new ();
   klass = g_type_class_ref (THUNAR_SBR_TYPE_OFFSET_MODE);
   for (n = 0; n < klass->n_values; ++n)
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(klass->values[n].value_nick));
-  exo_mutual_binding_new (G_OBJECT (remove_renamer), "start-offset-mode", G_OBJECT (combo), "active");
+  g_object_bind_property (G_OBJECT (remove_renamer), "start-offset-mode", G_OBJECT (combo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (grid), combo, 2, 0, 1, 1);
   g_type_class_unref (klass);
   gtk_widget_show (combo);
@@ -224,7 +229,7 @@ thunar_sbr_remove_renamer_init (ThunarSbrRemoveRenamer *remove_renamer)
   gtk_widget_show (remove_renamer->end_spinner);
 
   adjustment = gtk_spin_button_get_adjustment (GTK_SPIN_BUTTON (remove_renamer->end_spinner));
-  exo_mutual_binding_new (G_OBJECT (remove_renamer), "end-offset", G_OBJECT (adjustment), "value");
+  g_object_bind_property (G_OBJECT (remove_renamer), "end-offset", G_OBJECT (adjustment), "value", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
 
   /* set Atk label relation for the entry */
   object = gtk_widget_get_accessible (remove_renamer->end_spinner);
@@ -232,12 +237,13 @@ thunar_sbr_remove_renamer_init (ThunarSbrRemoveRenamer *remove_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   combo = gtk_combo_box_text_new ();
   klass = g_type_class_ref (THUNAR_SBR_TYPE_OFFSET_MODE);
   for (n = 0; n < klass->n_values; ++n)
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(klass->values[n].value_nick));
-  exo_mutual_binding_new (G_OBJECT (remove_renamer), "end-offset-mode", G_OBJECT (combo), "active");
+  g_object_bind_property (G_OBJECT (remove_renamer), "end-offset-mode", G_OBJECT (combo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (grid), combo, 2, 1, 1, 1);
   g_type_class_unref (klass);
   gtk_widget_show (combo);
@@ -325,7 +331,7 @@ thunar_sbr_remove_renamer_realize (GtkWidget *widget)
 
 
 
-static gchar*
+static gchar *
 thunar_sbr_remove_renamer_process (ThunarxRenamer  *renamer,
                                    ThunarxFileInfo *file,
                                    const gchar     *text,
@@ -344,9 +350,11 @@ thunar_sbr_remove_renamer_process (ThunarxRenamer  *renamer,
 
   /* determine the offsets for this file name */
   end_offset = (remove_renamer->end_offset_mode == THUNAR_SBR_OFFSET_MODE_LEFT)
-             ? remove_renamer->end_offset : (text_length - remove_renamer->end_offset);
+               ? remove_renamer->end_offset
+               : (text_length - remove_renamer->end_offset);
   start_offset = (remove_renamer->start_offset_mode == THUNAR_SBR_OFFSET_MODE_LEFT)
-               ? remove_renamer->start_offset : (text_length - remove_renamer->start_offset);
+                 ? remove_renamer->start_offset
+                 : (text_length - remove_renamer->start_offset);
 
   /* check if anything should be removed */
   if (G_UNLIKELY (start_offset >= end_offset || end_offset > text_length))
@@ -376,9 +384,11 @@ thunar_sbr_remove_renamer_update (ThunarSbrRemoveRenamer *remove_renamer)
     {
       /* check if start and end offset make sense */
       end_offset = (remove_renamer->end_offset_mode == THUNAR_SBR_OFFSET_MODE_LEFT)
-                 ? remove_renamer->end_offset : (G_MAXUINT - remove_renamer->end_offset);
+                   ? remove_renamer->end_offset
+                   : (G_MAXUINT - remove_renamer->end_offset);
       start_offset = (remove_renamer->start_offset_mode == THUNAR_SBR_OFFSET_MODE_LEFT)
-                   ? remove_renamer->start_offset : (G_MAXUINT - remove_renamer->start_offset);
+                     ? remove_renamer->start_offset
+                     : (G_MAXUINT - remove_renamer->start_offset);
 
       /* highlight invalid input by using theme specific colors */
       if (G_UNLIKELY (start_offset >= end_offset))
@@ -406,7 +416,7 @@ thunar_sbr_remove_renamer_update (ThunarSbrRemoveRenamer *remove_renamer)
  *
  * Return value: the newly allocated #ThunarSbrRemoveRenamer.
  **/
-ThunarSbrRemoveRenamer*
+ThunarSbrRemoveRenamer *
 thunar_sbr_remove_renamer_new (void)
 {
   return g_object_new (THUNAR_SBR_TYPE_REMOVE_RENAMER,
@@ -597,5 +607,3 @@ thunar_sbr_remove_renamer_set_start_offset_mode (ThunarSbrRemoveRenamer *remove_
       g_object_notify (G_OBJECT (remove_renamer), "start-offset-mode");
     }
 }
-
-

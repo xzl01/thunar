@@ -19,7 +19,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -29,11 +29,10 @@
 #include <string.h>
 #endif
 
-#include <thunar/thunar-file-monitor.h>
-#include <thunar/thunar-gobject-extensions.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-renamer-model.h>
-#include <thunar/thunar-util.h>
+#include "thunar/thunar-gobject-extensions.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-renamer-model.h"
+#include "thunar/thunar-util.h"
 
 
 
@@ -64,72 +63,103 @@ typedef struct _ThunarRenamerModelItem ThunarRenamerModelItem;
 
 
 
-static void                    thunar_renamer_model_tree_model_init     (GtkTreeModelIface       *iface);
-static void                    thunar_renamer_model_finalize            (GObject                 *object);
-static void                    thunar_renamer_model_get_property        (GObject                 *object,
-                                                                         guint                    prop_id,
-                                                                         GValue                  *value,
-                                                                         GParamSpec              *pspec);
-static void                    thunar_renamer_model_set_property        (GObject                 *object,
-                                                                         guint                    prop_id,
-                                                                         const GValue            *value,
-                                                                         GParamSpec              *pspec);
-static GtkTreeModelFlags       thunar_renamer_model_get_flags           (GtkTreeModel            *tree_model);
-static gint                    thunar_renamer_model_get_n_columns       (GtkTreeModel            *tree_model);
-static GType                   thunar_renamer_model_get_column_type     (GtkTreeModel            *tree_model,
-                                                                         gint                     column);
-static gboolean                thunar_renamer_model_get_iter            (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter,
-                                                                         GtkTreePath             *path);
-static GtkTreePath            *thunar_renamer_model_get_path            (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter);
-static void                    thunar_renamer_model_get_value           (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter,
-                                                                         gint                     column,
-                                                                         GValue                  *value);
-static gboolean                thunar_renamer_model_iter_next           (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter);
-static gboolean                thunar_renamer_model_iter_children       (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter,
-                                                                         GtkTreeIter             *parent);
-static gboolean                thunar_renamer_model_iter_has_child      (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter);
-static gint                    thunar_renamer_model_iter_n_children     (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter);
-static gboolean                thunar_renamer_model_iter_nth_child      (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter,
-                                                                         GtkTreeIter             *parent,
-                                                                         gint                     n);
-static gboolean                thunar_renamer_model_iter_parent         (GtkTreeModel            *tree_model,
-                                                                         GtkTreeIter             *iter,
-                                                                         GtkTreeIter             *child);
-static void                    thunar_renamer_model_file_changed        (ThunarRenamerModel      *renamer_model,
-                                                                         ThunarFile              *file,
-                                                                         ThunarFileMonitor       *file_monitor);
-static void                    thunar_renamer_model_file_destroyed      (ThunarRenamerModel      *renamer_model,
-                                                                         ThunarFile              *file,
-                                                                         ThunarFileMonitor       *file_monitor);
-static void                    thunar_renamer_model_invalidate_all      (ThunarRenamerModel      *renamer_model);
-static void                    thunar_renamer_model_invalidate_item     (ThunarRenamerModel      *renamer_model,
-                                                                         ThunarRenamerModelItem  *item);
-static gboolean                thunar_renamer_model_conflict_item       (ThunarRenamerModel      *renamer_model,
-                                                                         ThunarRenamerModelItem  *item);
-static gchar                  *thunar_renamer_model_process_item        (ThunarRenamerModel      *renamer_model,
-                                                                         ThunarRenamerModelItem  *item,
-                                                                         guint                    idx);
-static gboolean                thunar_renamer_model_update_idle         (gpointer                 user_data);
-static void                    thunar_renamer_model_update_idle_destroy (gpointer                 user_data);
-static ThunarRenamerModelItem *thunar_renamer_model_item_new            (ThunarFile              *file) G_GNUC_MALLOC;
-static void                    thunar_renamer_model_item_free           (gpointer                 data);
-static gint                    thunar_renamer_model_cmp_array           (gconstpointer            pointer_a,
-                                                                         gconstpointer            pointer_b,
-                                                                         gpointer                 user_data);
-static gboolean                thunar_renamer_model_get_can_rename      (ThunarRenamerModel      *renamer_model);
-static gboolean                thunar_renamer_model_get_frozen          (ThunarRenamerModel      *renamer_model);
-static void                    thunar_renamer_model_set_frozen          (ThunarRenamerModel      *renamer_model,
-                                                                         gboolean                 frozen);
-static void                    thunar_renamer_model_set_mode            (ThunarRenamerModel      *renamer_model,
-                                                                         ThunarRenamerMode        mode);
+static void
+thunar_renamer_model_tree_model_init (GtkTreeModelIface *iface);
+static void
+thunar_renamer_model_finalize (GObject *object);
+static void
+thunar_renamer_model_get_property (GObject    *object,
+                                   guint       prop_id,
+                                   GValue     *value,
+                                   GParamSpec *pspec);
+static void
+thunar_renamer_model_set_property (GObject      *object,
+                                   guint         prop_id,
+                                   const GValue *value,
+                                   GParamSpec   *pspec);
+static GtkTreeModelFlags
+thunar_renamer_model_get_flags (GtkTreeModel *tree_model);
+static gint
+thunar_renamer_model_get_n_columns (GtkTreeModel *tree_model);
+static GType
+thunar_renamer_model_get_column_type (GtkTreeModel *tree_model,
+                                      gint          column);
+static gboolean
+thunar_renamer_model_get_iter (GtkTreeModel *tree_model,
+                               GtkTreeIter  *iter,
+                               GtkTreePath  *path);
+static GtkTreePath *
+thunar_renamer_model_get_path (GtkTreeModel *tree_model,
+                               GtkTreeIter  *iter);
+static void
+thunar_renamer_model_get_value (GtkTreeModel *tree_model,
+                                GtkTreeIter  *iter,
+                                gint          column,
+                                GValue       *value);
+static gboolean
+thunar_renamer_model_iter_next (GtkTreeModel *tree_model,
+                                GtkTreeIter  *iter);
+static gboolean
+thunar_renamer_model_iter_children (GtkTreeModel *tree_model,
+                                    GtkTreeIter  *iter,
+                                    GtkTreeIter  *parent);
+static gboolean
+thunar_renamer_model_iter_has_child (GtkTreeModel *tree_model,
+                                     GtkTreeIter  *iter);
+static gint
+thunar_renamer_model_iter_n_children (GtkTreeModel *tree_model,
+                                      GtkTreeIter  *iter);
+static gboolean
+thunar_renamer_model_iter_nth_child (GtkTreeModel *tree_model,
+                                     GtkTreeIter  *iter,
+                                     GtkTreeIter  *parent,
+                                     gint          n);
+static gboolean
+thunar_renamer_model_iter_parent (GtkTreeModel *tree_model,
+                                  GtkTreeIter  *iter,
+                                  GtkTreeIter  *child);
+static void
+thunar_renamer_model_file_changed (ThunarRenamerModel *renamer_model,
+                                   ThunarFile         *file);
+static void
+thunar_renamer_model_file_destroyed (ThunarRenamerModel *renamer_model,
+                                     ThunarFile         *file);
+static void
+thunar_renamer_model_invalidate_all (ThunarRenamerModel *renamer_model);
+static void
+thunar_renamer_model_invalidate_item (ThunarRenamerModel     *renamer_model,
+                                      ThunarRenamerModelItem *item);
+static gboolean
+thunar_renamer_model_conflict_item (ThunarRenamerModel     *renamer_model,
+                                    ThunarRenamerModelItem *item);
+static gchar *
+thunar_renamer_model_process_item (ThunarRenamerModel     *renamer_model,
+                                   ThunarRenamerModelItem *item,
+                                   guint                   idx);
+static gboolean
+thunar_renamer_model_update_idle (gpointer user_data);
+static void
+thunar_renamer_model_update_idle_destroy (gpointer user_data);
+static ThunarRenamerModelItem *
+thunar_renamer_model_item_new (ThunarRenamerModel *renamer_model,
+                               ThunarFile         *file) G_GNUC_MALLOC;
+static void
+thunar_renamer_model_release_item (ThunarRenamerModel     *renamer_model,
+                                   ThunarRenamerModelItem *item);
+static gint
+thunar_renamer_model_cmp_array (gconstpointer pointer_a,
+                                gconstpointer pointer_b,
+                                gpointer      user_data);
+static gboolean
+thunar_renamer_model_get_can_rename (ThunarRenamerModel *renamer_model);
+static gboolean
+thunar_renamer_model_get_frozen (ThunarRenamerModel *renamer_model);
+static void
+thunar_renamer_model_set_frozen (ThunarRenamerModel *renamer_model,
+                                 gboolean            frozen);
+static void
+thunar_renamer_model_set_mode (ThunarRenamerModel *renamer_model,
+                               ThunarRenamerMode   mode);
 
 
 
@@ -140,26 +170,25 @@ struct _ThunarRenamerModelClass
 
 struct _ThunarRenamerModel
 {
-  GObject            __parent__;
+  GObject __parent__;
 
   /* the model stamp is only used when debugging is
    * enabled, to make sure we don't accept iterators
    * generated by another model.
    */
 #ifndef NDEBUG
-  gint               stamp;
+  gint stamp;
 #endif
 
-  ThunarRenamerMode  mode;
-  ThunarFileMonitor *file_monitor;
-  ThunarxRenamer    *renamer;
-  GList             *items;
+  ThunarRenamerMode mode;
+  ThunarxRenamer   *renamer;
+  GList            *items;
 
   /* TRUE if the model is currently frozen */
-  gboolean           frozen;
+  gboolean frozen;
 
   /* the idle source used to update the model */
-  guint              update_idle_id;
+  guint update_idle_id;
 };
 
 struct _ThunarRenamerModelItem
@@ -252,18 +281,18 @@ thunar_renamer_model_class_init (ThunarRenamerModelClass *klass)
 static void
 thunar_renamer_model_tree_model_init (GtkTreeModelIface *iface)
 {
-  iface->get_flags        = thunar_renamer_model_get_flags;
-  iface->get_n_columns    = thunar_renamer_model_get_n_columns;
-  iface->get_column_type  = thunar_renamer_model_get_column_type;
-  iface->get_iter         = thunar_renamer_model_get_iter;
-  iface->get_path         = thunar_renamer_model_get_path;
-  iface->get_value        = thunar_renamer_model_get_value;
-  iface->iter_next        = thunar_renamer_model_iter_next;
-  iface->iter_children    = thunar_renamer_model_iter_children;
-  iface->iter_has_child   = thunar_renamer_model_iter_has_child;
-  iface->iter_n_children  = thunar_renamer_model_iter_n_children;
-  iface->iter_nth_child   = thunar_renamer_model_iter_nth_child;
-  iface->iter_parent      = thunar_renamer_model_iter_parent;
+  iface->get_flags = thunar_renamer_model_get_flags;
+  iface->get_n_columns = thunar_renamer_model_get_n_columns;
+  iface->get_column_type = thunar_renamer_model_get_column_type;
+  iface->get_iter = thunar_renamer_model_get_iter;
+  iface->get_path = thunar_renamer_model_get_path;
+  iface->get_value = thunar_renamer_model_get_value;
+  iface->iter_next = thunar_renamer_model_iter_next;
+  iface->iter_children = thunar_renamer_model_iter_children;
+  iface->iter_has_child = thunar_renamer_model_iter_has_child;
+  iface->iter_n_children = thunar_renamer_model_iter_n_children;
+  iface->iter_nth_child = thunar_renamer_model_iter_nth_child;
+  iface->iter_parent = thunar_renamer_model_iter_parent;
 }
 
 
@@ -275,13 +304,6 @@ thunar_renamer_model_init (ThunarRenamerModel *renamer_model)
 #ifndef NDEBUG
   renamer_model->stamp = g_random_int ();
 #endif
-
-  /* connect to the file monitor */
-  renamer_model->file_monitor = thunar_file_monitor_get_default ();
-  g_signal_connect_swapped (G_OBJECT (renamer_model->file_monitor), "file-changed",
-                            G_CALLBACK (thunar_renamer_model_file_changed), renamer_model);
-  g_signal_connect_swapped (G_OBJECT (renamer_model->file_monitor), "file-destroyed",
-                            G_CALLBACK (thunar_renamer_model_file_destroyed), renamer_model);
 }
 
 
@@ -289,18 +311,17 @@ thunar_renamer_model_init (ThunarRenamerModel *renamer_model)
 static void
 thunar_renamer_model_finalize (GObject *object)
 {
+  GList              *lp;
   ThunarRenamerModel *renamer_model = THUNAR_RENAMER_MODEL (object);
 
   /* reset the renamer property (must be first!) */
   thunar_renamer_model_set_renamer (renamer_model, NULL);
 
   /* release all items */
-  g_list_free_full (renamer_model->items, thunar_renamer_model_item_free);
+  for (lp = renamer_model->items; lp != NULL; lp = lp->next)
+    thunar_renamer_model_release_item (renamer_model, lp->data);
 
-  /* disconnect from the file monitor */
-  g_signal_handlers_disconnect_by_func (G_OBJECT (renamer_model->file_monitor), thunar_renamer_model_file_destroyed, renamer_model);
-  g_signal_handlers_disconnect_by_func (G_OBJECT (renamer_model->file_monitor), thunar_renamer_model_file_changed, renamer_model);
-  g_object_unref (G_OBJECT (renamer_model->file_monitor));
+  g_list_free (renamer_model->items);
 
   /* be sure to cancel any pending update idle source (must be last!) */
   if (G_UNLIKELY (renamer_model->update_idle_id != 0))
@@ -443,7 +464,7 @@ thunar_renamer_model_get_iter (GtkTreeModel *tree_model,
 
 
 
-static GtkTreePath*
+static GtkTreePath *
 thunar_renamer_model_get_path (GtkTreeModel *tree_model,
                                GtkTreeIter  *iter)
 {
@@ -498,14 +519,14 @@ thunar_renamer_model_get_value (GtkTreeModel *tree_model,
       if (G_LIKELY (item->name != NULL))
         g_value_set_string (value, item->name);
       else if (item->conflict)
-        g_value_set_static_string (value, thunar_file_get_display_name (item->file));
+        g_value_set_static_string (value, thunar_file_get_basename (item->file));
       else
         g_value_set_static_string (value, "");
       break;
 
     case THUNAR_RENAMER_MODEL_COLUMN_OLDNAME:
       g_value_init (value, G_TYPE_STRING);
-      g_value_set_static_string (value, thunar_file_get_display_name (item->file));
+      g_value_set_static_string (value, thunar_file_get_basename (item->file));
       break;
 
     default:
@@ -600,8 +621,7 @@ thunar_renamer_model_iter_parent (GtkTreeModel *tree_model,
 
 static void
 thunar_renamer_model_file_changed (ThunarRenamerModel *renamer_model,
-                                   ThunarFile         *file,
-                                   ThunarFileMonitor  *file_monitor)
+                                   ThunarFile         *file)
 {
   ThunarRenamerModelItem *item;
   GtkTreePath            *path;
@@ -610,9 +630,7 @@ thunar_renamer_model_file_changed (ThunarRenamerModel *renamer_model,
   guint64                 date_changed;
 
   _thunar_return_if_fail (THUNAR_IS_FILE (file));
-  _thunar_return_if_fail (THUNAR_IS_FILE_MONITOR (file_monitor));
   _thunar_return_if_fail (THUNAR_IS_RENAMER_MODEL (renamer_model));
-  _thunar_return_if_fail (renamer_model->file_monitor == file_monitor);
 
   /* check if we have that file */
   for (lp = renamer_model->items; lp != NULL; lp = lp->next)
@@ -656,16 +674,13 @@ thunar_renamer_model_file_changed (ThunarRenamerModel *renamer_model,
 
 static void
 thunar_renamer_model_file_destroyed (ThunarRenamerModel *renamer_model,
-                                     ThunarFile         *file,
-                                     ThunarFileMonitor  *file_monitor)
+                                     ThunarFile         *file)
 {
   GtkTreePath *path;
   GList       *lp;
   gint         idx;
 
   _thunar_return_if_fail (THUNAR_IS_RENAMER_MODEL (renamer_model));
-  _thunar_return_if_fail (renamer_model->file_monitor == file_monitor);
-  _thunar_return_if_fail (THUNAR_IS_FILE_MONITOR (file_monitor));
   _thunar_return_if_fail (THUNAR_IS_FILE (file));
 
   /* check if we have that file */
@@ -676,7 +691,7 @@ thunar_renamer_model_file_destroyed (ThunarRenamerModel *renamer_model,
         idx = g_list_position (renamer_model->items, lp);
 
         /* free the item data */
-        thunar_renamer_model_item_free (lp->data);
+        thunar_renamer_model_release_item (renamer_model, lp->data);
 
         /* drop the item from the list */
         renamer_model->items = g_list_delete_link (renamer_model->items, lp);
@@ -731,9 +746,9 @@ static gboolean
 trm_same_directory (ThunarFile *a,
                     ThunarFile *b)
 {
-  GFile    *parent_a;
-  GFile    *parent_b;
-  gboolean  result;
+  GFile   *parent_a;
+  GFile   *parent_b;
+  gboolean result;
 
   /* determine the parent paths for both files */
   parent_a = g_file_get_parent (thunar_file_get_file (a));
@@ -771,9 +786,9 @@ thunar_renamer_model_conflict_item (ThunarRenamerModel     *renamer_model,
 
       /* check if this other item conflicts with the item in question (can only conflict if in same directory) */
       if (trm_same_directory (item->file, oitem->file)
-          && ((item->name != NULL && oitem->name == NULL && strcmp (item->name, thunar_file_get_display_name (oitem->file)) == 0)
-           || (item->name == NULL && oitem->name != NULL && strcmp (thunar_file_get_display_name (item->file), oitem->name) == 0)
-           || (item->name != NULL && oitem->name != NULL && strcmp (item->name, oitem->name) == 0)))
+          && ((item->name != NULL && oitem->name == NULL && strcmp (item->name, thunar_file_get_basename (oitem->file)) == 0)
+              || (item->name == NULL && oitem->name != NULL && strcmp (thunar_file_get_basename (item->file), oitem->name) == 0)
+              || (item->name != NULL && oitem->name != NULL && strcmp (item->name, oitem->name) == 0)))
         {
           /* check if the other item is already in conflict state */
           if (G_LIKELY (!oitem->conflict))
@@ -800,31 +815,31 @@ thunar_renamer_model_conflict_item (ThunarRenamerModel     *renamer_model,
 
 
 
-static gchar*
+static gchar *
 thunar_renamer_model_process_item (ThunarRenamerModel     *renamer_model,
                                    ThunarRenamerModelItem *item,
                                    guint                   idx)
 {
   ThunarRenamerMode mode;
-  const gchar      *display_name;
+  const gchar      *file_name;
   const gchar      *dot;
   gchar            *name = NULL;
   gchar            *prefix;
-  gchar            *suffix;
+  gchar            *extension;
   gchar            *text;
 
   /* no new name if no renamer is set */
   if (G_UNLIKELY (renamer_model->renamer == NULL))
     return NULL;
 
-  /* determine the current display name of the file */
-  display_name = thunar_file_get_display_name (item->file);
+  /* determine the current file name of the file */
+  file_name = thunar_file_get_basename (item->file);
 
   /* determine the extension in the filename */
-  dot = thunar_util_str_get_extension (display_name);
+  dot = thunar_util_str_get_extension (file_name);
 
-  /* if we don't have a dot, then no "Suffix only" rename can take place */
-  if (G_LIKELY (dot != NULL || renamer_model->mode != THUNAR_RENAMER_MODE_SUFFIX))
+  /* if we don't have a dot, then no "Extension only" rename can take place */
+  if (G_LIKELY (dot != NULL || renamer_model->mode != THUNAR_RENAMER_MODE_EXTENSION))
     {
       /* now, for "Name only", we need a dot, otherwise treat everything as name */
       if (renamer_model->mode == THUNAR_RENAMER_MODE_NAME && dot == NULL)
@@ -837,7 +852,7 @@ thunar_renamer_model_process_item (ThunarRenamerModel     *renamer_model,
         {
         case THUNAR_RENAMER_MODE_NAME:
           /* determine the name part of the display name */
-          text = g_strndup (display_name, (dot - display_name));
+          text = g_strndup (file_name, (dot - file_name));
 
           /* determine the new name */
           prefix = thunarx_renamer_process (renamer_model->renamer, THUNARX_FILE_INFO (item->file), text, idx);
@@ -850,21 +865,21 @@ thunar_renamer_model_process_item (ThunarRenamerModel     *renamer_model,
           g_free (text);
           break;
 
-        case THUNAR_RENAMER_MODE_SUFFIX:
-          /* determine the new suffix */
-          suffix = thunarx_renamer_process (renamer_model->renamer, THUNARX_FILE_INFO (item->file), dot + 1, idx);
+        case THUNAR_RENAMER_MODE_EXTENSION:
+          /* determine the new extension */
+          extension = thunarx_renamer_process (renamer_model->renamer, THUNARX_FILE_INFO (item->file), dot + 1, idx);
 
-          prefix = g_strndup (display_name, (dot - display_name) + 1);
-          name = g_strconcat (prefix, suffix, NULL);
+          prefix = g_strndup (file_name, (dot - file_name) + 1);
+          name = g_strconcat (prefix, extension, NULL);
           g_free (prefix);
 
-          /* release the suffix */
-          g_free (suffix);
+          /* release the extension */
+          g_free (extension);
           break;
 
         case THUNAR_RENAMER_MODE_BOTH:
           /* determine the new full name */
-          name = thunarx_renamer_process (renamer_model->renamer, THUNARX_FILE_INFO (item->file), display_name, idx);
+          name = thunarx_renamer_process (renamer_model->renamer, THUNARX_FILE_INFO (item->file), file_name, idx);
           break;
 
         default:
@@ -874,7 +889,7 @@ thunar_renamer_model_process_item (ThunarRenamerModel     *renamer_model,
     }
 
   /* check if the new name is equal to the old one */
-  if (exo_str_is_equal (name, display_name))
+  if (g_strcmp0 (name, file_name) == 0)
     {
       /* just return NULL then */
       g_free (name);
@@ -899,8 +914,6 @@ thunar_renamer_model_update_idle (gpointer user_data)
   gchar                  *name;
   GList                  *lp;
 
-THUNAR_THREADS_ENTER
-
   /* don't do anything if the model is frozen */
   if (G_LIKELY (!renamer_model->frozen))
     {
@@ -921,7 +934,7 @@ THUNAR_THREADS_ENTER
 
           /* determine the new name for the item */
           name = thunar_renamer_model_process_item (renamer_model, item, idx);
-          if (!exo_str_is_equal (item->name, name))
+          if (g_strcmp0 (item->name, name) != 0)
             {
               /* apply new name */
               g_free (item->name);
@@ -961,8 +974,6 @@ THUNAR_THREADS_ENTER
         }
     }
 
-THUNAR_THREADS_LEAVE
-
   /* keep the idle source as long as any item changed */
   return changed;
 }
@@ -981,8 +992,9 @@ thunar_renamer_model_update_idle_destroy (gpointer user_data)
 
 
 
-static ThunarRenamerModelItem*
-thunar_renamer_model_item_new (ThunarFile *file)
+static ThunarRenamerModelItem *
+thunar_renamer_model_item_new (ThunarRenamerModel *renamer_model,
+                               ThunarFile         *file)
 {
   ThunarRenamerModelItem *item;
 
@@ -991,15 +1003,24 @@ thunar_renamer_model_item_new (ThunarFile *file)
   item->date_changed = thunar_file_get_date (file, THUNAR_FILE_DATE_CHANGED);
   item->dirty = TRUE;
 
+  /* enable file watch for the file */
+  thunar_file_watch (item->file);
+
+  /* subscribe to relevant signals */
+  g_signal_connect_swapped (G_OBJECT (item->file), "changed", G_CALLBACK (thunar_renamer_model_file_changed), renamer_model);
+  g_signal_connect_swapped (G_OBJECT (item->file), "destroy", G_CALLBACK (thunar_renamer_model_file_destroyed), renamer_model);
+
   return item;
 }
 
 
 
 static void
-thunar_renamer_model_item_free (gpointer data)
+thunar_renamer_model_release_item (ThunarRenamerModel     *renamer_model,
+                                   ThunarRenamerModelItem *item)
 {
-  ThunarRenamerModelItem *item = data;
+  thunar_file_unwatch (item->file);
+  g_signal_handlers_disconnect_by_data (item->file, renamer_model);
 
   g_object_unref (G_OBJECT (item->file));
   g_free (item->name);
@@ -1054,7 +1075,7 @@ thunar_renamer_model_cmp_name (gconstpointer pointer_a,
  *
  * Return value: the newly allocated #ThunarRenamerModel.
  **/
-ThunarRenamerModel*
+ThunarRenamerModel *
 thunar_renamer_model_new (void)
 {
   return g_object_new (THUNAR_TYPE_RENAMER_MODEL, NULL);
@@ -1227,7 +1248,7 @@ thunar_renamer_model_set_mode (ThunarRenamerModel *renamer_model,
  *
  * Return value: the current renamer for @renamer_model.
  **/
-ThunarxRenamer*
+ThunarxRenamer *
 thunar_renamer_model_get_renamer (ThunarRenamerModel *renamer_model)
 {
   _thunar_return_val_if_fail (THUNAR_IS_RENAMER_MODEL (renamer_model), NULL);
@@ -1308,7 +1329,7 @@ thunar_renamer_model_insert (ThunarRenamerModel *renamer_model,
       return;
 
   /* allocate a new item for the file */
-  item = thunar_renamer_model_item_new (file);
+  item = thunar_renamer_model_item_new (renamer_model, file);
 
   /* append the item to the model */
   renamer_model->items = g_list_insert (renamer_model->items, item, position);
@@ -1374,7 +1395,7 @@ thunar_renamer_model_reorder (ThunarRenamerModel *renamer_model,
     {
       /* leave a hole in the sort position for the drop items */
       if (G_UNLIKELY (tree_paths != NULL
-          && m == position))
+                      && m == position))
         m++;
 
       sort_array[n].offset = n;
@@ -1473,8 +1494,7 @@ thunar_renamer_model_clear (ThunarRenamerModel *renamer_model)
   while (renamer_model->items != NULL)
     {
       /* just use the "file-destroyed" handler here to drop the first item */
-      thunar_renamer_model_file_destroyed (renamer_model, THUNAR_RENAMER_MODEL_ITEM (renamer_model->items->data)->file,
-                                           renamer_model->file_monitor);
+      thunar_renamer_model_file_destroyed (renamer_model, THUNAR_RENAMER_MODEL_ITEM (renamer_model->items->data)->file);
     }
 
   /* thaw notifications */
@@ -1509,7 +1529,7 @@ thunar_renamer_model_remove (ThunarRenamerModel *renamer_model,
     return;
 
   /* free the item data */
-  thunar_renamer_model_item_free (lp->data);
+  thunar_renamer_model_release_item (renamer_model, lp->data);
 
   /* drop the item from the list */
   renamer_model->items = g_list_delete_link (renamer_model->items, lp);
@@ -1520,4 +1540,3 @@ thunar_renamer_model_remove (ThunarRenamerModel *renamer_model,
   /* invalidate all other items */
   thunar_renamer_model_invalidate_all (renamer_model);
 }
-

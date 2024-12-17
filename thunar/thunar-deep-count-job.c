@@ -20,18 +20,18 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <glib.h>
-#include <glib-object.h>
-#include <gio/gio.h>
+#include "thunar/thunar-deep-count-job.h"
+#include "thunar/thunar-job.h"
+#include "thunar/thunar-marshal.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-util.h"
 
-#include <thunar/thunar-deep-count-job.h>
-#include <thunar/thunar-job.h>
-#include <thunar/thunar-marshal.h>
-#include <thunar/thunar-util.h>
-#include <thunar/thunar-private.h>
+#include <gio/gio.h>
+#include <glib-object.h>
+#include <glib.h>
 
 
 
@@ -44,13 +44,13 @@ enum
 
 
 #define DEEP_COUNT_FILE_INFO_NAMESPACE \
-  G_FILE_ATTRIBUTE_STANDARD_TYPE "," \
-  G_FILE_ATTRIBUTE_STANDARD_SIZE "," \
-  G_FILE_ATTRIBUTE_ID_FILESYSTEM
+  G_FILE_ATTRIBUTE_STANDARD_TYPE "," G_FILE_ATTRIBUTE_STANDARD_SIZE "," G_FILE_ATTRIBUTE_STANDARD_ALLOCATED_SIZE "," G_FILE_ATTRIBUTE_ID_FILESYSTEM
 
-static void     thunar_deep_count_job_finalize   (GObject                 *object);
-static gboolean thunar_deep_count_job_execute    (ExoJob                  *job,
-                                                  GError                 **error);
+static void
+thunar_deep_count_job_finalize (GObject *object);
+static gboolean
+thunar_deep_count_job_execute (ExoJob  *job,
+                               GError **error);
 
 
 
@@ -61,6 +61,7 @@ struct _ThunarDeepCountJobClass
   /* signals */
   void (*status_update) (ThunarJob *job,
                          guint64    total_size,
+                         guint64    total_size_on_disk,
                          guint      file_count,
                          guint      directory_count,
                          guint      unreadable_directory_count);
@@ -74,13 +75,14 @@ struct _ThunarDeepCountJob
   GFileQueryInfoFlags query_flags;
 
   /* the time of the last "status-update" emission */
-  gint64              last_time;
+  gint64 last_time;
 
   /* status information */
-  guint64             total_size;
-  guint               file_count;
-  guint               directory_count;
-  guint               unreadable_directory_count;
+  guint64 total_size;
+  guint64 total_size_on_disk;
+  guint   file_count;
+  guint   directory_count;
+  guint   unreadable_directory_count;
 };
 
 
@@ -109,6 +111,7 @@ thunar_deep_count_job_class_init (ThunarDeepCountJobClass *klass)
    * ThunarDeepCountJob::status-update:
    * @job                        : a #ThunarJob.
    * @total_size                 : the total size in bytes.
+   * @total_size_on_disk         : the total allocated size in bytes.
    * @file_count                 : the number of files.
    * @directory_count            : the number of directories.
    * @unreadable_directory_count : the number of unreadable directories.
@@ -117,17 +120,18 @@ thunar_deep_count_job_class_init (ThunarDeepCountJobClass *klass)
    * directories and bytes counted so far.
    **/
   deep_count_signals[STATUS_UPDATE] =
-    g_signal_new ("status-update",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_NO_HOOKS,
-                  G_STRUCT_OFFSET (ThunarDeepCountJobClass, status_update),
-                  NULL, NULL,
-                  _thunar_marshal_VOID__UINT64_UINT_UINT_UINT,
-                  G_TYPE_NONE, 4,
-                  G_TYPE_UINT64,
-                  G_TYPE_UINT,
-                  G_TYPE_UINT,
-                  G_TYPE_UINT);
+  g_signal_new ("status-update",
+                G_TYPE_FROM_CLASS (klass),
+                G_SIGNAL_NO_HOOKS,
+                G_STRUCT_OFFSET (ThunarDeepCountJobClass, status_update),
+                NULL, NULL,
+                _thunar_marshal_VOID__UINT64_UINT64_UINT_UINT_UINT,
+                G_TYPE_NONE, 5,
+                G_TYPE_UINT64,
+                G_TYPE_UINT64,
+                G_TYPE_UINT,
+                G_TYPE_UINT,
+                G_TYPE_UINT);
 }
 
 
@@ -161,6 +165,7 @@ thunar_deep_count_job_status_update (ThunarDeepCountJob *job)
                 deep_count_signals[STATUS_UPDATE],
                 0,
                 job->total_size,
+                job->total_size_on_disk,
                 job->file_count,
                 job->directory_count,
                 job->unreadable_directory_count);
@@ -169,11 +174,11 @@ thunar_deep_count_job_status_update (ThunarDeepCountJob *job)
 
 
 static gboolean
-thunar_deep_count_job_process (ExoJob       *job,
-                               GFile        *file,
-                               GFileInfo    *file_info,
-                               const gchar  *toplevel_fs_id,
-                               GError      **error)
+thunar_deep_count_job_process (ExoJob      *job,
+                               GFile       *file,
+                               GFileInfo   *file_info,
+                               const gchar *toplevel_fs_id,
+                               GError     **error)
 {
   ThunarDeepCountJob *count_job = THUNAR_DEEP_COUNT_JOB (job);
   GFileEnumerator    *enumerator;
@@ -245,8 +250,7 @@ thunar_deep_count_job_process (ExoJob       *job,
     {
       /* try to read from the directory */
       enumerator = g_file_enumerate_children (file,
-                                              DEEP_COUNT_FILE_INFO_NAMESPACE ","
-                                              G_FILE_ATTRIBUTE_STANDARD_NAME,
+                                              DEEP_COUNT_FILE_INFO_NAMESPACE "," G_FILE_ATTRIBUTE_STANDARD_NAME,
                                               count_job->query_flags,
                                               exo_job_get_cancellable (job),
                                               error);
@@ -323,7 +327,16 @@ thunar_deep_count_job_process (ExoJob       *job,
       count_job->file_count++;
 
       /* add size of the file to the total size */
-      count_job->total_size += g_file_info_get_size (info);
+      count_job->total_size += g_file_info_get_attribute_uint64 (info, G_FILE_ATTRIBUTE_STANDARD_SIZE);
+
+      /* add allocated size of the file to the total allocated size */
+      if (count_job->total_size_on_disk != (guint64) -1)
+        {
+          if (g_file_info_has_attribute (info, G_FILE_ATTRIBUTE_STANDARD_ALLOCATED_SIZE))
+            count_job->total_size_on_disk += g_file_info_get_attribute_uint64 (info, G_FILE_ATTRIBUTE_STANDARD_ALLOCATED_SIZE);
+          else
+            count_job->total_size_on_disk = (guint64) -1;
+        }
     }
 
   /* destroy the file info */
@@ -355,6 +368,7 @@ thunar_deep_count_job_execute (ExoJob  *job,
 
   /* reset counters */
   count_job->total_size = 0;
+  count_job->total_size_on_disk = 0;
   count_job->file_count = 0;
   count_job->directory_count = 0;
   count_job->unreadable_directory_count = 0;
@@ -398,8 +412,8 @@ thunar_deep_count_job_execute (ExoJob  *job,
 
 
 ThunarDeepCountJob *
-thunar_deep_count_job_new (GList               *files,
-                           GFileQueryInfoFlags  flags)
+thunar_deep_count_job_new (GList              *files,
+                           GFileQueryInfoFlags flags)
 {
   ThunarDeepCountJob *job;
 
@@ -409,7 +423,7 @@ thunar_deep_count_job_new (GList               *files,
   job->files = g_list_copy (files);
   job->query_flags = flags;
 
-  g_list_foreach (job->files, (GFunc) (void (*)(void)) g_object_ref, NULL);
+  g_list_foreach (job->files, (GFunc) (void (*) (void)) g_object_ref, NULL);
 
   return job;
 }

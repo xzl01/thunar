@@ -18,15 +18,18 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunar/thunar-location-bar.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-navigator.h>
-#include <thunar/thunar-location-entry.h>
-#include <thunar/thunar-location-buttons.h>
-#include <thunar/thunar-preferences.h>
+#include "thunar/thunar-location-bar.h"
+#include "thunar/thunar-location-buttons.h"
+#include "thunar/thunar-location-entry.h"
+#include "thunar/thunar-navigator.h"
+#include "thunar/thunar-preferences.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-util.h"
+#include "thunar/thunar-window.h"
+
 
 
 struct _ThunarLocationBarClass
@@ -34,18 +37,22 @@ struct _ThunarLocationBarClass
   GtkBinClass __parent__;
 
   /* signals */
-  void (*reload_requested) (void);
   void (*entry_done) (void);
+  void (*reload_requested) (void); /* UNUSED */
 };
 
 struct _ThunarLocationBar
 {
   GtkBin __parent__;
 
+  ThunarPreferences *preferences;
+
   ThunarFile *current_directory;
 
-  GtkWidget  *locationEntry;
-  GtkWidget  *locationButtons;
+  GtkWidget *locationEntry;
+  GtkWidget *locationButtons;
+
+  gboolean is_searching;
 };
 
 
@@ -57,26 +64,36 @@ enum
 };
 
 
-static void         thunar_location_bar_navigator_init             (ThunarNavigatorIface *iface);
-static void         thunar_location_bar_finalize                   (GObject              *object);
-static void         thunar_location_bar_get_property               (GObject              *object,
-                                                                    guint                 prop_id,
-                                                                    GValue               *value,
-                                                                    GParamSpec           *pspec);
-static void         thunar_location_bar_set_property               (GObject              *object,
-                                                                    guint                 prop_id,
-                                                                    const GValue         *value,
-                                                                    GParamSpec           *pspec);
-static ThunarFile  *thunar_location_bar_get_current_directory      (ThunarNavigator      *navigator);
-static void         thunar_location_bar_set_current_directory      (ThunarNavigator      *navigator,
-                                                                    ThunarFile           *current_directory);
-static GtkWidget   *thunar_location_bar_install_widget             (ThunarLocationBar    *bar,
-                                                                    GType                 type);
-static void         thunar_location_bar_reload_requested           (ThunarLocationBar    *bar);
-static gboolean     thunar_location_bar_settings_changed           (ThunarLocationBar    *bar);
-static void         thunar_location_bar_on_enry_edit_done          (ThunarLocationEntry  *entry,
-                                                                    ThunarLocationBar    *bar);
-
+static void
+thunar_location_bar_navigator_init (ThunarNavigatorIface *iface);
+static void
+thunar_location_bar_finalize (GObject *object);
+static void
+thunar_location_bar_get_property (GObject    *object,
+                                  guint       prop_id,
+                                  GValue     *value,
+                                  GParamSpec *pspec);
+static void
+thunar_location_bar_set_property (GObject      *object,
+                                  guint         prop_id,
+                                  const GValue *value,
+                                  GParamSpec   *pspec);
+static ThunarFile *
+thunar_location_bar_get_current_directory (ThunarNavigator *navigator);
+static void
+thunar_location_bar_set_current_directory (ThunarNavigator *navigator,
+                                           ThunarFile      *current_directory);
+static GtkWidget *
+thunar_location_bar_install_widget (ThunarLocationBar *bar,
+                                    GType              type);
+static void
+thunar_location_bar_settings_changed (ThunarLocationBar *bar);
+static void
+thunar_location_bar_on_enry_edit_done (ThunarLocationEntry *entry,
+                                       ThunarLocationBar   *bar);
+static void
+thunar_location_bar_request_temp_entry (ThunarLocationBar *bar,
+                                        const gchar       *initial_text);
 
 
 G_DEFINE_TYPE_WITH_CODE (ThunarLocationBar, thunar_location_bar, GTK_TYPE_BIN,
@@ -101,26 +118,12 @@ thunar_location_bar_class_init (ThunarLocationBarClass *klass)
   gobject_class->set_property = thunar_location_bar_set_property;
   gobject_class->finalize = thunar_location_bar_finalize;
 
-  klass->reload_requested = exo_noop;
+  klass->reload_requested = NULL;
 
   /* Override ThunarNavigator's properties */
   g_object_class_override_property (gobject_class, PROP_CURRENT_DIRECTORY, "current-directory");
 
   /* install signals */
-
-  /**
-   * ThunarLocationBar::reload-requested:
-   * @location_bar : a #ThunarLocationBar.
-   *
-   * Emitted by @location_bar whenever the user clicked a "reload" button
-   **/
-  g_signal_new ("reload-requested",
-                G_TYPE_FROM_CLASS (klass),
-                G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
-                G_STRUCT_OFFSET (ThunarLocationBarClass, reload_requested),
-                NULL, NULL,
-                NULL,
-                G_TYPE_NONE, 0);
 
   /**
    * ThunarLocationBar::entry-done:
@@ -143,7 +146,7 @@ thunar_location_bar_class_init (ThunarLocationBarClass *klass)
 static void
 thunar_location_bar_init (ThunarLocationBar *bar)
 {
-  ThunarPreferences *preferences = thunar_preferences_get ();
+  bar->preferences = thunar_preferences_get ();
 
   bar->current_directory = NULL;
   bar->locationEntry = NULL;
@@ -151,7 +154,7 @@ thunar_location_bar_init (ThunarLocationBar *bar)
 
   thunar_location_bar_settings_changed (bar);
 
-  g_signal_connect_object (preferences, "notify::last-location-bar", G_CALLBACK (thunar_location_bar_settings_changed), bar, G_CONNECT_SWAPPED);
+  g_signal_connect_swapped (bar->preferences, "notify::last-location-bar", G_CALLBACK (thunar_location_bar_settings_changed), bar);
 }
 
 
@@ -162,6 +165,10 @@ thunar_location_bar_finalize (GObject *object)
   ThunarLocationBar *bar = THUNAR_LOCATION_BAR (object);
 
   _thunar_return_if_fail (THUNAR_IS_LOCATION_BAR (bar));
+
+  /* disconnect from the preferences */
+  g_signal_handlers_disconnect_by_func (bar->preferences, thunar_location_bar_settings_changed, bar);
+  g_object_unref (bar->preferences);
 
   if (bar->locationEntry)
     g_object_unref (bar->locationEntry);
@@ -186,10 +193,10 @@ thunar_location_bar_navigator_init (ThunarNavigatorIface *iface)
 
 
 static void
-thunar_location_bar_get_property (GObject              *object,
-                                  guint                 prop_id,
-                                  GValue               *value,
-                                  GParamSpec           *pspec)
+thunar_location_bar_get_property (GObject    *object,
+                                  guint       prop_id,
+                                  GValue     *value,
+                                  GParamSpec *pspec)
 {
   switch (prop_id)
     {
@@ -205,10 +212,11 @@ thunar_location_bar_get_property (GObject              *object,
 
 
 
-static void thunar_location_bar_set_property   (GObject              *object,
-                                                guint                 prop_id,
-                                                const GValue         *value,
-                                                GParamSpec           *pspec)
+static void
+thunar_location_bar_set_property (GObject      *object,
+                                  guint         prop_id,
+                                  const GValue *value,
+                                  GParamSpec   *pspec)
 {
   switch (prop_id)
     {
@@ -233,16 +241,18 @@ thunar_location_bar_get_current_directory (ThunarNavigator *navigator)
 
 
 static void
-thunar_location_bar_set_current_directory (ThunarNavigator      *navigator,
-                                           ThunarFile           *current_directory)
+thunar_location_bar_set_current_directory (ThunarNavigator *navigator,
+                                           ThunarFile      *current_directory)
 {
   ThunarLocationBar *bar = THUNAR_LOCATION_BAR (navigator);
   GtkWidget         *child;
 
-  if (bar->current_directory) g_object_unref (bar->current_directory);
+  if (bar->current_directory)
+    g_object_unref (bar->current_directory);
   bar->current_directory = current_directory;
 
-  if (current_directory) g_object_ref (current_directory);
+  if (current_directory)
+    g_object_ref (current_directory);
 
   if ((child = gtk_bin_get_child (GTK_BIN (bar))) && THUNAR_IS_NAVIGATOR (child))
     thunar_navigator_set_current_directory (THUNAR_NAVIGATOR (child), current_directory);
@@ -252,17 +262,9 @@ thunar_location_bar_set_current_directory (ThunarNavigator      *navigator,
 
 
 
-static void
-thunar_location_bar_reload_requested (ThunarLocationBar *bar)
-{
-  g_signal_emit_by_name (bar, "reload-requested");
-}
-
-
-
 static GtkWidget *
-thunar_location_bar_install_widget (ThunarLocationBar    *bar,
-                                    GType                 type)
+thunar_location_bar_install_widget (ThunarLocationBar *bar,
+                                    GType              type)
 {
   GtkWidget *installedWidget, *child;
 
@@ -276,7 +278,6 @@ thunar_location_bar_install_widget (ThunarLocationBar    *bar,
         {
           bar->locationEntry = gtk_widget_new (THUNAR_TYPE_LOCATION_ENTRY, "current-directory", NULL, NULL);
           g_object_ref (bar->locationEntry);
-          g_signal_connect_swapped (bar->locationEntry, "reload-requested", G_CALLBACK (thunar_location_bar_reload_requested), bar);
           g_signal_connect_swapped (bar->locationEntry, "change-directory", G_CALLBACK (thunar_navigator_change_directory), THUNAR_NAVIGATOR (bar));
           g_signal_connect_swapped (bar->locationEntry, "open-new-tab", G_CALLBACK (thunar_navigator_open_new_tab), THUNAR_NAVIGATOR (bar));
         }
@@ -288,7 +289,7 @@ thunar_location_bar_install_widget (ThunarLocationBar    *bar,
         {
           bar->locationButtons = gtk_widget_new (THUNAR_TYPE_LOCATION_BUTTONS, "current-directory", NULL, NULL);
           g_object_ref (bar->locationButtons);
-          g_signal_connect_swapped (bar->locationButtons, "entry-requested", G_CALLBACK (thunar_location_bar_request_entry), bar);
+          g_signal_connect_swapped (bar->locationButtons, "entry-requested", G_CALLBACK (thunar_location_bar_request_temp_entry), bar);
           g_signal_connect_swapped (bar->locationButtons, "change-directory", G_CALLBACK (thunar_navigator_change_directory), THUNAR_NAVIGATOR (bar));
           g_signal_connect_swapped (bar->locationButtons, "open-new-tab", G_CALLBACK (thunar_navigator_open_new_tab), THUNAR_NAVIGATOR (bar));
         }
@@ -314,10 +315,17 @@ thunar_location_bar_on_enry_edit_done (ThunarLocationEntry *entry,
 {
   g_signal_handlers_disconnect_by_func (entry, thunar_location_bar_on_enry_edit_done, bar);
 
-  g_object_ref (bar);
-  g_idle_add_full (G_PRIORITY_HIGH_IDLE, (GSourceFunc)thunar_location_bar_settings_changed, bar, g_object_unref);
-
+  thunar_location_bar_settings_changed (bar);
   g_signal_emit_by_name (bar, "entry-done");
+}
+
+
+
+static void
+thunar_location_bar_request_temp_entry (ThunarLocationBar *bar,
+                                        const gchar       *initial_text)
+{
+  thunar_location_bar_request_entry (bar, initial_text, TRUE);
 }
 
 
@@ -327,6 +335,7 @@ thunar_location_bar_on_enry_edit_done (ThunarLocationEntry *entry,
  * @bar          : The #ThunarLocationBar
  * @initial_text : The initial text to be placed inside the entry, or NULL to
  *                 use the path of the current directory.
+ * @temporary_till_focus_lost : Revert to the previous location bar style when focus got lost
  *
  * Makes the location bar display an entry with the given text and places the cursor
  * accordingly. If the currently displayed location widget is a path bar, it will be
@@ -335,7 +344,8 @@ thunar_location_bar_on_enry_edit_done (ThunarLocationEntry *entry,
  */
 void
 thunar_location_bar_request_entry (ThunarLocationBar *bar,
-                                   const gchar       *initial_text)
+                                   const gchar       *initial_text,
+                                   gboolean           temporary_till_focus_lost)
 {
   GtkWidget *child;
 
@@ -355,18 +365,22 @@ thunar_location_bar_request_entry (ThunarLocationBar *bar,
       thunar_location_entry_accept_focus (THUNAR_LOCATION_ENTRY (child), initial_text);
     }
 
-  g_signal_connect (child, "edit-done", G_CALLBACK (thunar_location_bar_on_enry_edit_done), bar);
+  if (temporary_till_focus_lost)
+    {
+      thunar_location_entry_enable_edit_done_once (THUNAR_LOCATION_ENTRY (child));
+      g_signal_connect (child, "edit-done", G_CALLBACK (thunar_location_bar_on_enry_edit_done), bar);
+    }
 }
 
 
 
-static gboolean
+static void
 thunar_location_bar_settings_changed (ThunarLocationBar *bar)
 {
   gchar *last_location_bar;
   GType  type;
 
-  g_object_get (thunar_preferences_get(), "last-location-bar", &last_location_bar, NULL);
+  g_object_get (bar->preferences, "last-location-bar", &last_location_bar, NULL);
 
   /* validate it */
   if (!strcmp (last_location_bar, g_type_name (THUNAR_TYPE_LOCATION_BUTTONS)))
@@ -379,8 +393,39 @@ thunar_location_bar_settings_changed (ThunarLocationBar *bar)
   g_free (last_location_bar);
 
   thunar_location_bar_install_widget (bar, type);
-
-  return FALSE;
 }
 
 
+
+/**
+ * thunar_location_bar_cancel_search
+ * @bar          : The #ThunarLocationBar
+ *
+ * Cancels the search for the location bar and its children.
+ */
+void
+thunar_location_bar_cancel_search (ThunarLocationBar *bar)
+{
+  if (bar->locationEntry != NULL)
+    thunar_location_entry_cancel_search (THUNAR_LOCATION_ENTRY (bar->locationEntry));
+
+  /* Recover the previous location bar style (BUTTONS/ENTRY) after search is done */
+  thunar_location_bar_settings_changed (bar);
+}
+
+
+
+/**
+ * thunar_location_bar_get_search_query:
+ * @entry        : a #ThunarLocationBar.
+ *
+ * Returns a copy of the search query in the text field of @entry or "" if the path_entry doesn't contain
+ * a search query.
+ *
+ * It's the responsibility of the caller to free the returned string using `g_free`.
+ **/
+gchar *
+thunar_location_bar_get_search_query (ThunarLocationBar *entry)
+{
+  return (entry->locationEntry != NULL) ? thunar_location_entry_get_search_query (THUNAR_LOCATION_ENTRY (entry->locationEntry)) : g_strdup ("");
+}

@@ -18,16 +18,18 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
 
-#include <thunar/thunar-column-model.h>
-#include <thunar/thunar-preferences.h>
-#include <thunar/thunar-private.h>
+#include "thunar/thunar-column-model.h"
+#include "thunar/thunar-preferences.h"
+#include "thunar/thunar-private.h"
+
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -40,53 +42,77 @@ enum
 
 
 
-static void               thunar_column_model_tree_model_init         (GtkTreeModelIface      *iface);
-static void               thunar_column_model_finalize                (GObject                *object);
-static GtkTreeModelFlags  thunar_column_model_get_flags               (GtkTreeModel           *tree_model);
-static gint               thunar_column_model_get_n_columns           (GtkTreeModel           *tree_model);
-static GType              thunar_column_model_get_column_type         (GtkTreeModel           *tree_model,
-                                                                       gint                    idx);
-static gboolean           thunar_column_model_get_iter                (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter,
-                                                                       GtkTreePath            *path);
-static GtkTreePath       *thunar_column_model_get_path                (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter);
-static void               thunar_column_model_get_value               (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter,
-                                                                       gint                    idx,
-                                                                       GValue                 *value);
-static gboolean           thunar_column_model_iter_next               (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter);
-static gboolean           thunar_column_model_iter_children           (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter,
-                                                                       GtkTreeIter            *parent);
-static gboolean           thunar_column_model_iter_has_child          (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter);
-static gint               thunar_column_model_iter_n_children         (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter);
-static gboolean           thunar_column_model_iter_nth_child          (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter,
-                                                                       GtkTreeIter            *parent,
-                                                                       gint                    n);
-static gboolean           thunar_column_model_iter_parent             (GtkTreeModel           *tree_model,
-                                                                       GtkTreeIter            *iter,
-                                                                       GtkTreeIter            *child);
-static void               thunar_column_model_load_column_order       (ThunarColumnModel      *column_model);
-static void               thunar_column_model_save_column_order       (ThunarColumnModel      *column_model);
-static void               thunar_column_model_notify_column_order     (ThunarPreferences      *preferences,
-                                                                       GParamSpec             *pspec,
-                                                                       ThunarColumnModel      *column_model);
-static void               thunar_column_model_load_column_widths      (ThunarColumnModel      *column_model);
-static void               thunar_column_model_save_column_widths      (ThunarColumnModel      *column_model);
-static void               thunar_column_model_notify_column_widths    (ThunarPreferences      *preferences,
-                                                                       GParamSpec             *pspec,
-                                                                       ThunarColumnModel      *column_model);
-static void               thunar_column_model_load_visible_columns    (ThunarColumnModel      *column_model);
-static void               thunar_column_model_save_visible_columns    (ThunarColumnModel      *column_model);
-static void               thunar_column_model_notify_visible_columns  (ThunarPreferences      *preferences,
-                                                                       GParamSpec             *pspec,
-                                                                       ThunarColumnModel      *column_model);
-static gboolean           thunar_column_model_set_column_width_timer  (gpointer                user_data);
+static void
+thunar_column_model_tree_model_init (GtkTreeModelIface *iface);
+static void
+thunar_column_model_finalize (GObject *object);
+static GtkTreeModelFlags
+thunar_column_model_get_flags (GtkTreeModel *tree_model);
+static gint
+thunar_column_model_get_n_columns (GtkTreeModel *tree_model);
+static GType
+thunar_column_model_get_column_type (GtkTreeModel *tree_model,
+                                     gint          idx);
+static gboolean
+thunar_column_model_get_iter (GtkTreeModel *tree_model,
+                              GtkTreeIter  *iter,
+                              GtkTreePath  *path);
+static GtkTreePath *
+thunar_column_model_get_path (GtkTreeModel *tree_model,
+                              GtkTreeIter  *iter);
+static void
+thunar_column_model_get_value (GtkTreeModel *tree_model,
+                               GtkTreeIter  *iter,
+                               gint          idx,
+                               GValue       *value);
+static gboolean
+thunar_column_model_iter_next (GtkTreeModel *tree_model,
+                               GtkTreeIter  *iter);
+static gboolean
+thunar_column_model_iter_children (GtkTreeModel *tree_model,
+                                   GtkTreeIter  *iter,
+                                   GtkTreeIter  *parent);
+static gboolean
+thunar_column_model_iter_has_child (GtkTreeModel *tree_model,
+                                    GtkTreeIter  *iter);
+static gint
+thunar_column_model_iter_n_children (GtkTreeModel *tree_model,
+                                     GtkTreeIter  *iter);
+static gboolean
+thunar_column_model_iter_nth_child (GtkTreeModel *tree_model,
+                                    GtkTreeIter  *iter,
+                                    GtkTreeIter  *parent,
+                                    gint          n);
+static gboolean
+thunar_column_model_iter_parent (GtkTreeModel *tree_model,
+                                 GtkTreeIter  *iter,
+                                 GtkTreeIter  *child);
+static void
+thunar_column_model_load_column_order (ThunarColumnModel *column_model);
+static void
+thunar_column_model_save_column_order (ThunarColumnModel *column_model);
+static void
+thunar_column_model_notify_column_order (ThunarPreferences *preferences,
+                                         GParamSpec        *pspec,
+                                         ThunarColumnModel *column_model);
+static void
+thunar_column_model_load_column_widths (ThunarColumnModel *column_model);
+static void
+thunar_column_model_save_column_widths (ThunarColumnModel *column_model);
+static void
+thunar_column_model_notify_column_widths (ThunarPreferences *preferences,
+                                          GParamSpec        *pspec,
+                                          ThunarColumnModel *column_model);
+static void
+thunar_column_model_load_visible_columns (ThunarColumnModel *column_model);
+static void
+thunar_column_model_save_visible_columns (ThunarColumnModel *column_model);
+static void
+thunar_column_model_notify_visible_columns (ThunarPreferences *preferences,
+                                            GParamSpec        *pspec,
+                                            ThunarColumnModel *column_model);
+static gboolean
+thunar_column_model_set_column_width_timer (gpointer user_data);
 
 
 
@@ -107,7 +133,7 @@ struct _ThunarColumnModel
    * generated by another model.
    */
 #ifndef NDEBUG
-  gint               stamp;
+  gint stamp;
 #endif
 
   ThunarPreferences *preferences;
@@ -145,13 +171,13 @@ thunar_column_model_class_init (ThunarColumnModelClass *klass)
    * of a column in @column_model is changed.
    **/
   column_model_signals[COLUMNS_CHANGED] =
-    g_signal_new (I_("columns-changed"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (ThunarColumnModelClass, columns_changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
-                  G_TYPE_NONE, 0);
+  g_signal_new (I_ ("columns-changed"),
+                G_TYPE_FROM_CLASS (klass),
+                G_SIGNAL_RUN_LAST,
+                G_STRUCT_OFFSET (ThunarColumnModelClass, columns_changed),
+                NULL, NULL,
+                g_cclosure_marshal_VOID__VOID,
+                G_TYPE_NONE, 0);
 }
 
 
@@ -200,6 +226,8 @@ thunar_column_model_init (ThunarColumnModel *column_model)
 
   /* load the list of visible columns */
   thunar_column_model_load_visible_columns (column_model);
+
+  column_model->save_width_timer_id = 0;
 }
 
 
@@ -210,7 +238,7 @@ thunar_column_model_finalize (GObject *object)
   ThunarColumnModel *column_model = THUNAR_COLUMN_MODEL (object);
 
   /* disconnect from the global preferences */
-  g_signal_handlers_disconnect_matched (G_OBJECT (column_model->preferences), G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, column_model);
+  g_signal_handlers_disconnect_by_data (G_OBJECT (column_model->preferences), column_model);
   g_object_unref (G_OBJECT (column_model->preferences));
 
   /* drop any running "save width" timer */
@@ -252,6 +280,9 @@ thunar_column_model_get_column_type (GtkTreeModel *tree_model,
 
     case THUNAR_COLUMN_MODEL_COLUMN_VISIBLE:
       return G_TYPE_BOOLEAN;
+
+    case THUNAR_COLUMN_MODEL_COLUMN_TOOLTIP:
+      return G_TYPE_STRING;
     }
 
   _thunar_assert_not_reached ();
@@ -265,10 +296,9 @@ thunar_column_model_get_iter (GtkTreeModel *tree_model,
                               GtkTreeIter  *iter,
                               GtkTreePath  *path)
 {
-  ThunarColumnModel *column_model = THUNAR_COLUMN_MODEL (tree_model);
-  ThunarColumn       column;
+  ThunarColumn column;
 
-  _thunar_return_val_if_fail (THUNAR_IS_COLUMN_MODEL (column_model), FALSE);
+  _thunar_return_val_if_fail (THUNAR_IS_COLUMN_MODEL (tree_model), FALSE);
   _thunar_return_val_if_fail (gtk_tree_path_get_depth (path) > 0, FALSE);
 
   /* check if the path is valid */
@@ -277,13 +307,13 @@ thunar_column_model_get_iter (GtkTreeModel *tree_model,
     return FALSE;
 
   /* generate an iterator */
-  GTK_TREE_ITER_INIT (*iter, column_model->stamp, GINT_TO_POINTER (column));
+  GTK_TREE_ITER_INIT (*iter, THUNAR_COLUMN_MODEL (tree_model)->stamp, GINT_TO_POINTER (column));
   return TRUE;
 }
 
 
 
-static GtkTreePath*
+static GtkTreePath *
 thunar_column_model_get_path (GtkTreeModel *tree_model,
                               GtkTreeIter  *iter)
 {
@@ -324,12 +354,18 @@ thunar_column_model_get_value (GtkTreeModel *tree_model,
 
     case THUNAR_COLUMN_MODEL_COLUMN_MUTABLE:
       g_value_init (value, G_TYPE_BOOLEAN);
-      g_value_set_boolean (value, (column != THUNAR_COLUMN_NAME));
+      g_value_set_boolean (value, (column != THUNAR_COLUMN_NAME && !thunar_column_is_special (column)));
       break;
 
     case THUNAR_COLUMN_MODEL_COLUMN_VISIBLE:
       g_value_init (value, G_TYPE_BOOLEAN);
       g_value_set_boolean (value, thunar_column_model_get_column_visible (column_model, column));
+      break;
+
+    case THUNAR_COLUMN_MODEL_COLUMN_TOOLTIP:
+      g_value_init (value, G_TYPE_STRING);
+      if (thunar_column_is_special (column))
+        g_value_set_static_string (value, _("This column is reserved for special locations"));
       break;
 
     default:
@@ -364,13 +400,11 @@ thunar_column_model_iter_children (GtkTreeModel *tree_model,
                                    GtkTreeIter  *iter,
                                    GtkTreeIter  *parent)
 {
-  ThunarColumnModel *column_model = THUNAR_COLUMN_MODEL (tree_model);
-
-  _thunar_return_val_if_fail (THUNAR_IS_COLUMN_MODEL (column_model), FALSE);
+  _thunar_return_val_if_fail (THUNAR_IS_COLUMN_MODEL (tree_model), FALSE);
 
   if (G_LIKELY (parent == NULL))
     {
-      GTK_TREE_ITER_INIT (*iter, column_model->stamp, GINT_TO_POINTER (0));
+      GTK_TREE_ITER_INIT (*iter, THUNAR_COLUMN_MODEL (tree_model)->stamp, GINT_TO_POINTER (0));
       return TRUE;
     }
 
@@ -405,13 +439,11 @@ thunar_column_model_iter_nth_child (GtkTreeModel *tree_model,
                                     GtkTreeIter  *parent,
                                     gint          n)
 {
-  ThunarColumnModel *column_model = THUNAR_COLUMN_MODEL (tree_model);
-
-  _thunar_return_val_if_fail (THUNAR_IS_COLUMN_MODEL (column_model), FALSE);
+  _thunar_return_val_if_fail (THUNAR_IS_COLUMN_MODEL (tree_model), FALSE);
 
   if (G_LIKELY (parent == NULL && n < THUNAR_N_VISIBLE_COLUMNS))
     {
-      GTK_TREE_ITER_INIT (*iter, column_model->stamp, GINT_TO_POINTER (n));
+      GTK_TREE_ITER_INIT (*iter, THUNAR_COLUMN_MODEL (tree_model)->stamp, GINT_TO_POINTER (n));
       return TRUE;
     }
 
@@ -565,7 +597,7 @@ thunar_column_model_load_column_widths (ThunarColumnModel *column_model)
   column_model->width[THUNAR_COLUMN_NAME] = 200;
 
   /* parse the widths from the preferences */
-  for (n = 0; column_widths[n] != NULL; ++n)
+  for (n = 0; (n < THUNAR_N_VISIBLE_COLUMNS) && (column_widths[n] != NULL); ++n)
     {
       width = strtol (column_widths[n], NULL, 10);
       if (G_LIKELY (width >= 0))
@@ -676,6 +708,10 @@ thunar_column_model_save_visible_columns (ThunarColumnModel *column_model)
   for (n = 0; n < THUNAR_N_VISIBLE_COLUMNS; ++n)
     if (column_model->visible[klass->values[n].value])
       {
+        /* skip special columns */
+        if (thunar_column_is_special (klass->values[n].value))
+          continue;
+
         /* append a comma if not empty */
         if (*visible_columns->str != '\0')
           g_string_append_c (visible_columns, ',');
@@ -751,7 +787,7 @@ thunar_column_model_set_column_width_timer (gpointer user_data)
  *
  * Return value: the default #ThunarColumnModel.
  **/
-ThunarColumnModel*
+ThunarColumnModel *
 thunar_column_model_get_default (void)
 {
   static ThunarColumnModel *column_model = NULL;
@@ -851,7 +887,7 @@ thunar_column_model_get_column_for_iter (ThunarColumnModel *column_model,
  * Return value: the current #ThunarColumn order for the given
  *               @column_model instance.
  **/
-const ThunarColumn*
+const ThunarColumn *
 thunar_column_model_get_column_order (ThunarColumnModel *column_model)
 {
   _thunar_return_val_if_fail (THUNAR_IS_COLUMN_MODEL (column_model), NULL);
@@ -870,7 +906,7 @@ thunar_column_model_get_column_order (ThunarColumnModel *column_model)
  *
  * Return value: the user visible name for @column.
  **/
-const gchar*
+const gchar *
 thunar_column_model_get_column_name (ThunarColumnModel *column_model,
                                      ThunarColumn       column)
 {
@@ -928,6 +964,7 @@ thunar_column_model_set_column_visible (ThunarColumnModel *column_model,
                                         ThunarColumn       column,
                                         gboolean           visible)
 {
+  ThunarColumn column_real = 0;
   GtkTreePath *path;
   GtkTreeIter  iter;
   gint         n;
@@ -943,7 +980,7 @@ thunar_column_model_set_column_visible (ThunarColumnModel *column_model,
   visible = !!visible;
 
   /* check if we have a new value */
-  if (G_LIKELY (column_model->visible[column] != visible))
+  if (G_LIKELY (column_model->visible[column] != visible) || thunar_column_is_special (column))
     {
       /* apply the new value */
       column_model->visible[column] = visible;
@@ -952,12 +989,12 @@ thunar_column_model_set_column_visible (ThunarColumnModel *column_model,
       for (n = 0; n < THUNAR_N_VISIBLE_COLUMNS; ++n)
         if (column_model->order[n] == column)
           {
-            column = n;
+            column_real = n;
             break;
           }
 
       /* emit "row-changed" */
-      path = gtk_tree_path_new_from_indices (column, -1);
+      path = gtk_tree_path_new_from_indices (column_real, -1);
       if (gtk_tree_model_get_iter (GTK_TREE_MODEL (column_model), &iter, path))
         gtk_tree_model_row_changed (GTK_TREE_MODEL (column_model), path, &iter);
       gtk_tree_path_free (path);
@@ -965,8 +1002,9 @@ thunar_column_model_set_column_visible (ThunarColumnModel *column_model,
       /* emit "columns-changed" */
       g_signal_emit (G_OBJECT (column_model), column_model_signals[COLUMNS_CHANGED], 0);
 
-      /* save the list of visible columns */
-      thunar_column_model_save_visible_columns (column_model);
+      /* save the list of visible columns (excluding special columns) */
+      if (!thunar_column_is_special (column))
+        thunar_column_model_save_visible_columns (column_model);
     }
 }
 
@@ -1019,7 +1057,10 @@ thunar_column_model_set_column_width (ThunarColumnModel *column_model,
 
       /* store the settings... */
       if (column_model->save_width_timer_id != 0)
-        g_source_remove (column_model->save_width_timer_id);
+        {
+          g_source_remove (column_model->save_width_timer_id);
+          column_model->save_width_timer_id = 0;
+        }
 
       /* ... asynchronously and only once to not overload xfconf */
       column_model->save_width_timer_id = g_timeout_add (1000,
@@ -1027,5 +1068,3 @@ thunar_column_model_set_column_width (ThunarColumnModel *column_model,
                                                          column_model);
     }
 }
-
-

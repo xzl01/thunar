@@ -23,7 +23,6 @@
 #endif
 
 #include <exo/exo.h>
-
 #include <thunar-apr/thunar-apr-image-page.h>
 
 #ifdef HAVE_EXIF
@@ -32,8 +31,9 @@
 
 
 
-static void thunar_apr_image_page_file_changed  (ThunarAprAbstractPage    *abstract_page,
-                                                 ThunarxFileInfo          *file);
+static void
+thunar_apr_image_page_file_changed (ThunarAprAbstractPage *abstract_page,
+                                    ThunarxFileInfo       *file);
 
 
 
@@ -42,7 +42,10 @@ static const struct
 {
   const gchar *name;
   ExifTag      tag;
-} TAIP_EXIF[] =
+}
+
+/* clang-format off */
+TAIP_EXIF[] =
 {
   { N_ ("Date Taken:"),        EXIF_TAG_DATE_TIME_ORIGINAL,  },
   { N_ ("Camera Brand:"),      EXIF_TAG_MAKE,                },
@@ -59,6 +62,7 @@ static const struct
   { N_ ("Description:"),       EXIF_TAG_IMAGE_DESCRIPTION,   },
   { N_ ("Comment:"),           EXIF_TAG_USER_COMMENT,        },
 };
+/* clang-format on */
 #endif
 
 
@@ -75,7 +79,7 @@ struct _ThunarAprImagePage
   GtkWidget            *dimensions_label;
 
 #ifdef HAVE_EXIF
-  GtkWidget            *exif_labels[G_N_ELEMENTS (TAIP_EXIF)];
+  GtkWidget *exif_labels[G_N_ELEMENTS (TAIP_EXIF)];
 #endif
 };
 
@@ -109,8 +113,8 @@ thunar_apr_image_page_init (ThunarAprImagePage *image_page)
   GtkWidget      *label;
   GtkWidget      *grid;
 #ifdef HAVE_EXIF
-  GtkWidget      *spacer;
-  guint           n;
+  GtkWidget *spacer;
+  guint      n;
 #endif
 
   gtk_container_set_border_width (GTK_CONTAINER (image_page), 12);
@@ -149,6 +153,7 @@ thunar_apr_image_page_init (ThunarAprImagePage *image_page)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   label = gtk_label_new (_("Image Size:"));
   gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
@@ -170,6 +175,7 @@ thunar_apr_image_page_init (ThunarAprImagePage *image_page)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
 #ifdef HAVE_EXIF
   /* some spacing between the General info and the Exif info */
@@ -194,7 +200,7 @@ thunar_apr_image_page_init (ThunarAprImagePage *image_page)
       gtk_grid_attach (GTK_GRID (grid), image_page->exif_labels[n], 1, n + 3, 1, 1);
       gtk_widget_show (image_page->exif_labels[n]);
 
-      exo_binding_new (G_OBJECT (image_page->exif_labels[n]), "visible", G_OBJECT (label), "visible");
+      g_object_bind_property (G_OBJECT (image_page->exif_labels[n]), "visible", G_OBJECT (label), "visible", G_BINDING_SYNC_CREATE);
 
       /* set Atk label relation for the label */
       object = gtk_widget_get_accessible (image_page->exif_labels[n]);
@@ -202,6 +208,7 @@ thunar_apr_image_page_init (ThunarAprImagePage *image_page)
       relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
       atk_relation_set_add (relations, relation);
       g_object_unref (G_OBJECT (relation));
+      g_object_unref (relations);
     }
 #endif
 
@@ -223,10 +230,10 @@ thunar_apr_image_page_file_changed (ThunarAprAbstractPage *abstract_page,
   gint                height;
   gint                width;
 #ifdef HAVE_EXIF
-  ExifEntry          *exif_entry;
-  ExifData           *exif_data;
-  gchar               exif_buffer[1024];
-  guint               n;
+  ExifEntry *exif_entry;
+  ExifData  *exif_data;
+  gchar      exif_buffer[1024];
+  guint      n;
 #endif
 
   /* determine the URI for the file */
@@ -243,8 +250,13 @@ thunar_apr_image_page_file_changed (ThunarAprAbstractPage *abstract_page,
       if (G_LIKELY (format != NULL))
         {
           /* update the "Image Type" label */
-          text = g_strdup_printf ("%s (%s)", gdk_pixbuf_format_get_name (format), gdk_pixbuf_format_get_description (format));
+          gchar *name = gdk_pixbuf_format_get_name (format);
+          gchar *desc = gdk_pixbuf_format_get_description (format);
+          text = g_strdup_printf ("%s (%s)", name, desc);
+
           gtk_label_set_text (GTK_LABEL (image_page->type_label), text);
+          g_free (name);
+          g_free (desc);
           g_free (text);
 
           /* update the "Image Size" label */
@@ -305,7 +317,3 @@ thunar_apr_image_page_file_changed (ThunarAprAbstractPage *abstract_page,
   g_free (filename);
   g_free (uri);
 }
-
-
-
-

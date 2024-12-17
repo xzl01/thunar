@@ -18,21 +18,19 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_STDARG_H
 #include <stdarg.h>
 #endif
 
+#include "thunar/thunar-gtk-extensions.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-util.h"
+#include "thunarx/thunarx.h"
+
 #include <exo/exo.h>
-
-#include <thunar/thunar-gtk-extensions.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-util.h>
-
-#include <thunarx/thunarx.h>
-
 #include <libxfce4ui/libxfce4ui.h>
 
 
@@ -62,6 +60,29 @@ thunar_gtk_label_set_a11y_relation (GtkLabel  *label,
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
+}
+
+
+
+/**
+ * thunar_gtk_label_disable_hyphens:
+ * @label : a #GtkLabel.
+ *
+ * Tells @label to not insert hyphens by adding the attribute to its #PangoAttrList.
+ **/
+void
+thunar_gtk_label_disable_hyphens (GtkLabel *label)
+{
+#ifdef PANGO_VERSION_1_44
+  PangoAttrList *attr_list;
+
+  _thunar_return_if_fail (GTK_IS_LABEL (label));
+
+  attr_list = gtk_label_get_attributes (label);
+  pango_attr_list_insert (attr_list, pango_attr_insert_hyphens_new (FALSE));
+  gtk_label_set_attributes (label, attr_list);
+#endif
 }
 
 
@@ -76,19 +97,19 @@ thunar_gtk_label_set_a11y_relation (GtkLabel  *label,
  *
  * Return value: (transfer full): The new #GtkImageMenuItem.
  **/
-GtkWidget*
+GtkWidget *
 thunar_gtk_menu_thunarx_menu_item_new (GObject      *thunarx_menu_item,
                                        GtkMenuShell *menu_to_append_item)
 {
-  gchar        *name, *label_text, *tooltip_text, *icon_name, *accel_path;
-  gboolean      sensitive;
-  GtkWidget    *gtk_menu_item;
-  ThunarxMenu  *thunarx_menu;
-  GList        *children;
-  GList        *lp;
-  GtkWidget    *submenu;
-  GtkWidget    *image = NULL;
-  GIcon        *icon = NULL;
+  gchar       *name, *label_text, *tooltip_text, *icon_name, *accel_path;
+  gboolean     sensitive;
+  GtkWidget   *gtk_menu_item;
+  ThunarxMenu *thunarx_menu;
+  GList       *children;
+  GList       *lp;
+  GtkWidget   *submenu;
+  GtkWidget   *image = NULL;
+  GIcon       *icon = NULL;
 
   g_return_val_if_fail (THUNARX_IS_MENU_ITEM (thunarx_menu_item), NULL);
 
@@ -105,28 +126,29 @@ thunar_gtk_menu_thunarx_menu_item_new (GObject      *thunarx_menu_item,
   if (icon_name != NULL)
     icon = g_icon_new_for_string (icon_name, NULL);
   if (icon != NULL)
-    image = gtk_image_new_from_gicon (icon,GTK_ICON_SIZE_MENU);
+    image = gtk_image_new_from_gicon (icon, GTK_ICON_SIZE_MENU);
   gtk_menu_item = xfce_gtk_image_menu_item_new (label_text, tooltip_text, accel_path,
                                                 G_CALLBACK (thunarx_menu_item_activate),
                                                 G_OBJECT (thunarx_menu_item), image, menu_to_append_item);
 
+  gtk_widget_set_sensitive (GTK_WIDGET (gtk_menu_item), sensitive);
+
   /* recursively add submenu items if any */
   if (gtk_menu_item != NULL && thunarx_menu != NULL)
-  {
-    children = thunarx_menu_get_items (thunarx_menu);
-    submenu = gtk_menu_new ();
-    for (lp = children; lp != NULL; lp = lp->next)
-      thunar_gtk_menu_thunarx_menu_item_new (lp->data, GTK_MENU_SHELL (submenu));
-    gtk_menu_item_set_submenu (GTK_MENU_ITEM (gtk_menu_item), submenu);
-    thunarx_menu_item_list_free (children);
-  }
+    {
+      children = thunarx_menu_get_items (thunarx_menu);
+      submenu = gtk_menu_new ();
+      for (lp = children; lp != NULL; lp = lp->next)
+        thunar_gtk_menu_thunarx_menu_item_new (lp->data, GTK_MENU_SHELL (submenu));
+      gtk_menu_item_set_submenu (GTK_MENU_ITEM (gtk_menu_item), submenu);
+      thunarx_menu_item_list_free (children);
+    }
 
   g_free (name);
   g_free (accel_path);
   g_free (label_text);
   g_free (tooltip_text);
-  if (icon_name != NULL)
-    g_free (icon_name);
+  g_free (icon_name);
   if (icon != NULL)
     g_object_unref (icon);
 
@@ -171,36 +193,17 @@ void
 thunar_gtk_menu_run (GtkMenu *menu)
 {
   GdkEvent *event = gtk_get_current_event ();
+
+  /* hide mnemonics in DnD menu by adding button-release-event parameters */
+  if (event != NULL && event->type == GDK_DROP_START)
+    {
+      event->button.type = GDK_BUTTON_RELEASE;
+      event->button.button = 3;
+    }
+
   thunar_gtk_menu_run_at_event (menu, event);
   gdk_event_free (event);
 }
-
-
-
-#if GTK_CHECK_VERSION (3, 24, 8)
-static void
-moved_to_rect_cb (GdkWindow          *window,
-                  const GdkRectangle *flipped_rect,
-                  const GdkRectangle *final_rect,
-                  gboolean            flipped_x,
-                  gboolean            flipped_y,
-                  GtkMenu            *menu)
-{
-    g_signal_emit_by_name (menu, "popped-up", 0, flipped_rect, final_rect, flipped_x, flipped_y);
-    g_signal_stop_emission_by_name (window, "moved-to-rect");
-}
-
-
-
-static void
-popup_menu_realized (GtkWidget *menu,
-                     gpointer   user_data)
-{
-    GdkWindow *toplevel = gtk_widget_get_window (gtk_widget_get_toplevel (menu));
-    g_signal_handlers_disconnect_by_func (toplevel, moved_to_rect_cb, menu);
-    g_signal_connect (toplevel, "moved-to-rect", G_CALLBACK (moved_to_rect_cb), menu);
-}
-#endif
 
 
 
@@ -218,8 +221,7 @@ popup_menu_realized (GtkWidget *menu,
  *
  **/
 void
-thunar_gtk_menu_run_at_event (GtkMenu *menu,
-                              GdkEvent *event)
+thunar_gtk_menu_run_at_event (GtkMenu *menu, GdkEvent *event)
 {
   GMainLoop *loop;
   gulong     signal_id;
@@ -232,13 +234,6 @@ thunar_gtk_menu_run_at_event (GtkMenu *menu,
   /* run an internal main loop */
   loop = g_main_loop_new (NULL, FALSE);
   signal_id = g_signal_connect_swapped (G_OBJECT (menu), "deactivate", G_CALLBACK (g_main_loop_quit), loop);
-
-#if GTK_CHECK_VERSION (3, 24, 8)
-    /* Workaround for incorrect popup menus size */
-    g_signal_connect (G_OBJECT (menu), "realize", G_CALLBACK (popup_menu_realized), NULL);
-    gtk_widget_realize (GTK_WIDGET (menu));
-#endif
-
   gtk_menu_popup_at_pointer (menu, event);
   gtk_menu_reposition (menu);
   gtk_grab_add (GTK_WIDGET (menu));
@@ -255,21 +250,48 @@ thunar_gtk_menu_run_at_event (GtkMenu *menu,
 
 
 /**
+ * thunar_gtk_menu_hide_accel_labels:
+ * @menu : a #GtkMenu instance
+ *
+ * Will hide the accel_labels of all menu items of this menu and its submenus
+ **/
+void
+thunar_gtk_menu_hide_accel_labels (GtkMenu *menu)
+{
+  GList     *children, *lp;
+  GtkWidget *submenu;
+
+  _thunar_return_if_fail (GTK_IS_MENU (menu));
+
+  children = gtk_container_get_children (GTK_CONTAINER (menu));
+  for (lp = children; lp != NULL; lp = lp->next)
+    {
+      xfce_gtk_menu_item_set_accel_label (lp->data, NULL);
+      submenu = gtk_menu_item_get_submenu (lp->data);
+      if (submenu != NULL)
+        thunar_gtk_menu_hide_accel_labels (GTK_MENU (submenu));
+    }
+  g_list_free (children);
+}
+
+
+
+/**
  * thunar_gtk_widget_set_tooltip:
  * @widget : a #GtkWidget for which to set the tooltip.
  * @format : a printf(3)-style format string.
  * @...    : additional arguments for @format.
  *
  * Sets the tooltip for the @widget to a string generated
- * from the @format and the additional arguments in @...<!--->.
+ * from the @format and the additional arguments in @...<!---->.
  **/
 void
 thunar_gtk_widget_set_tooltip (GtkWidget   *widget,
                                const gchar *format,
                                ...)
 {
-  va_list  var_args;
-  gchar   *tooltip;
+  va_list var_args;
+  gchar  *tooltip;
 
   _thunar_return_if_fail (GTK_IS_WIDGET (widget));
   _thunar_return_if_fail (g_utf8_validate (format, -1, NULL));
@@ -292,7 +314,7 @@ thunar_gtk_widget_set_tooltip (GtkWidget   *widget,
  * thunar_gtk_get_focused_widget:
  * Return value: (transfer none): currently focused widget or NULL, if there is none.
  **/
-GtkWidget*
+GtkWidget *
 thunar_gtk_get_focused_widget (void)
 {
   GtkApplication *app;
@@ -342,8 +364,7 @@ thunar_gtk_mount_operation_new (gpointer parent)
 gboolean
 thunar_gtk_editable_can_cut (GtkEditable *editable)
 {
-  return gtk_editable_get_editable (editable) &&
-         thunar_gtk_editable_can_copy (editable);
+  return gtk_editable_get_editable (editable) && thunar_gtk_editable_can_copy (editable);
 }
 
 
@@ -357,7 +378,7 @@ thunar_gtk_editable_can_cut (GtkEditable *editable)
 gboolean
 thunar_gtk_editable_can_copy (GtkEditable *editable)
 {
-  return gtk_editable_get_selection_bounds (editable, NULL,NULL);
+  return gtk_editable_get_selection_bounds (editable, NULL, NULL);
 }
 
 
@@ -372,4 +393,23 @@ gboolean
 thunar_gtk_editable_can_paste (GtkEditable *editable)
 {
   return gtk_editable_get_editable (editable);
+}
+
+
+
+/**
+ * thunar_gtk_orientable_get_center_pos:
+ *
+ * Return value: The pixel corrsponding to the center of the orientable widget (either in height or in width)
+ **/
+gint
+thunar_gtk_orientable_get_center_pos (GtkOrientable *orientable)
+{
+  GtkAllocation allocation;
+
+  gtk_widget_get_allocation (GTK_WIDGET (orientable), &allocation);
+  if (gtk_orientable_get_orientation (orientable) == GTK_ORIENTATION_HORIZONTAL)
+    return (gint) (allocation.width / 2);
+  else
+    return (gint) (allocation.height / 2);
 }

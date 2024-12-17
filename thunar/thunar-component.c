@@ -18,42 +18,43 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
+
+#include "thunar/thunar-component.h"
+#include "thunar/thunar-private.h"
 
 #include <exo/exo.h>
 
-#include <thunar/thunar-component.h>
-#include <thunar/thunar-private.h>
 
 
-
-static void thunar_component_class_init (gpointer klass);
+static void
+thunar_component_class_init (gpointer klass);
 
 
 
 GType
 thunar_component_get_type (void)
 {
-  static volatile gsize type__volatile = 0;
-  GType                 type;
+  static gsize type__static = 0;
+  GType        type;
 
-  if (g_once_init_enter (&type__volatile))
+  if (g_once_init_enter (&type__static))
     {
       type = g_type_register_static_simple (G_TYPE_INTERFACE,
-                                            I_("ThunarComponent"),
+                                            I_ ("ThunarComponent"),
                                             sizeof (ThunarComponentIface),
-                                            (GClassInitFunc) (void (*)(void)) thunar_component_class_init,
+                                            (GClassInitFunc) (void (*) (void)) thunar_component_class_init,
                                             0,
                                             NULL,
                                             0);
 
       g_type_interface_add_prerequisite (type, THUNAR_TYPE_NAVIGATOR);
 
-      g_once_init_leave (&type__volatile, type);
+      g_once_init_leave (&type__static, type);
     }
 
-  return type__volatile;
+  return type__static;
 }
 
 
@@ -93,16 +94,19 @@ thunar_component_class_init (gpointer klass)
  * thunar_component_get_selected_files:
  * @component : a #ThunarComponent instance.
  *
- * Returns the set of selected files. Check the description
+ * Returns the set of selected #ThunarFile<!---->s. Check the description
  * of the :selected-files property for details.
  *
- * Return value: the set of selected files.
+ * Return value: the set of selected #ThunarFile<!---->s.
  **/
-GList*
+GList *
 thunar_component_get_selected_files (ThunarComponent *component)
 {
   _thunar_return_val_if_fail (THUNAR_IS_COMPONENT (component), NULL);
-  return (*THUNAR_COMPONENT_GET_IFACE (component)->get_selected_files) (component);
+  if (THUNAR_COMPONENT_GET_IFACE (component)->get_selected_files != NULL)
+    return (*THUNAR_COMPONENT_GET_IFACE (component)->get_selected_files) (component);
+  else
+    return NULL;
 }
 
 
@@ -121,26 +125,6 @@ thunar_component_set_selected_files (ThunarComponent *component,
                                      GList           *selected_files)
 {
   _thunar_return_if_fail (THUNAR_IS_COMPONENT (component));
-  (*THUNAR_COMPONENT_GET_IFACE (component)->set_selected_files) (component, selected_files);
-}
-
-
-
-/**
- * thunar_component_restore_selection:
- * @component      : a #ThunarComponent instance.
- *
- * Make sure that the @selected_files stay selected when a @component
- * updates. This may be necessary on row changes etc.
- **/
-void
-thunar_component_restore_selection (ThunarComponent *component)
-{
-  GList           *selected_files;
-
-  _thunar_return_if_fail (THUNAR_IS_COMPONENT (component));
-
-  selected_files = thunar_g_file_list_copy (thunar_component_get_selected_files (component));
-  thunar_component_set_selected_files (component, selected_files);
-  thunar_g_file_list_free (selected_files);
+  if (THUNAR_COMPONENT_GET_IFACE (component)->set_selected_files != NULL)
+    (*THUNAR_COMPONENT_GET_IFACE (component)->set_selected_files) (component, selected_files);
 }

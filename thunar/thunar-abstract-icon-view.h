@@ -20,7 +20,7 @@
 #ifndef __THUNAR_ABSTRACT_ICON_VIEW_H__
 #define __THUNAR_ABSTRACT_ICON_VIEW_H__
 
-#include <thunar/thunar-standard-view.h>
+#include "thunar/thunar-standard-view.h"
 
 G_BEGIN_DECLS;
 
@@ -28,24 +28,12 @@ typedef struct _ThunarAbstractIconViewPrivate ThunarAbstractIconViewPrivate;
 typedef struct _ThunarAbstractIconViewClass   ThunarAbstractIconViewClass;
 typedef struct _ThunarAbstractIconView        ThunarAbstractIconView;
 
-#define THUNAR_TYPE_ABSTRACT_ICON_VIEW             (thunar_abstract_icon_view_get_type ())
-#define THUNAR_ABSTRACT_ICON_VIEW(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW, ThunarAbstractIconView))
-#define THUNAR_ABSTRACT_ICON_VIEW_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), THUNAR_TYPE_ABSTRACT_ICON_VIEW, ThunarAbstractIconViewClass))
-#define THUNAR_IS_ABSTRACT_ICON_VIEW(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW))
-#define THUNAR_IS_ABSTRACT_ICON_VIEW_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW))
-#define THUNAR_ABSTRACT_ICON_VIEW_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW, ThunarAbstractIconViewClass))
-
-/* #XfceGtkActionEntrys provided by this widget */
-typedef enum
-{
-  THUNAR_ABSTRACT_ICON_VIEW_ACTION_ARRANGE_ITEMS_MENU,
-  THUNAR_ABSTRACT_ICON_VIEW_ACTION_SORT_BY_NAME,
-  THUNAR_ABSTRACT_ICON_VIEW_ACTION_SORT_BY_SIZE,
-  THUNAR_ABSTRACT_ICON_VIEW_ACTION_SORT_BY_TYPE,
-  THUNAR_ABSTRACT_ICON_VIEW_ACTION_SORT_BY_MTIME,
-  THUNAR_ABSTRACT_ICON_VIEW_ACTION_SORT_ASCENDING,
-  THUNAR_ABSTRACT_ICON_VIEW_ACTION_SORT_DESCENDING,
-} ThunarAbstractIconViewAction;
+#define THUNAR_TYPE_ABSTRACT_ICON_VIEW (thunar_abstract_icon_view_get_type ())
+#define THUNAR_ABSTRACT_ICON_VIEW(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW, ThunarAbstractIconView))
+#define THUNAR_ABSTRACT_ICON_VIEW_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), THUNAR_TYPE_ABSTRACT_ICON_VIEW, ThunarAbstractIconViewClass))
+#define THUNAR_IS_ABSTRACT_ICON_VIEW(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW))
+#define THUNAR_IS_ABSTRACT_ICON_VIEW_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW))
+#define THUNAR_ABSTRACT_ICON_VIEW_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), THUNAR_TYPE_ABSTRACT_ICON_VIEW, ThunarAbstractIconViewClass))
 
 struct _ThunarAbstractIconViewClass
 {
@@ -58,7 +46,8 @@ struct _ThunarAbstractIconView
   ThunarAbstractIconViewPrivate *priv;
 };
 
-GType thunar_abstract_icon_view_get_type (void) G_GNUC_CONST;
+GType
+thunar_abstract_icon_view_get_type (void) G_GNUC_CONST;
 
 G_END_DECLS;
 

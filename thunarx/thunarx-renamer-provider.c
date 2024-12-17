@@ -19,11 +19,13 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunarx/thunarx-renamer-provider.h>
-#include <thunarx/thunarx-private.h>
+#include "thunarx/thunarx-private.h"
+#include "thunarx/thunarx-renamer-provider.h"
+
+#include <libxfce4util/libxfce4util.h>
 
 /**
  * SECTION: thunarx-renamer-provider
@@ -39,13 +41,13 @@
 GType
 thunarx_renamer_provider_get_type (void)
 {
-  static volatile gsize type__volatile = 0;
-  GType                 type;
+  static gsize type__static = 0;
+  GType        type;
 
-  if (g_once_init_enter (&type__volatile))
+  if (g_once_init_enter (&type__static))
     {
       type = g_type_register_static_simple (G_TYPE_INTERFACE,
-                                            I_("ThunarxRenamerProvider"),
+                                            I_ ("ThunarxRenamerProvider"),
                                             sizeof (ThunarxRenamerProviderIface),
                                             NULL,
                                             0,
@@ -54,10 +56,10 @@ thunarx_renamer_provider_get_type (void)
 
       g_type_interface_add_prerequisite (type, G_TYPE_OBJECT);
 
-      g_once_init_leave (&type__volatile, type);
+      g_once_init_leave (&type__static, type);
     }
 
-  return type__volatile;
+  return type__static;
 }
 
 
@@ -93,7 +95,7 @@ thunarx_renamer_provider_get_type (void)
  * Returns: (transfer full) (element-type ThunarxRenamer): the list of #ThunarxRenamer<!---->s provided by the
  *               specified @provider.
  **/
-GList*
+GList *
 thunarx_renamer_provider_get_renamers (ThunarxRenamerProvider *provider)
 {
   GList *renamers;

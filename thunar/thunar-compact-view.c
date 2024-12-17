@@ -18,14 +18,15 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunar/thunar-compact-view.h>
+#include "thunar/thunar-compact-view.h"
 
 
 
-static AtkObject   *thunar_compact_view_get_accessible (GtkWidget               *widget);
+static AtkObject *
+thunar_compact_view_get_accessible (GtkWidget *widget);
 
 
 
@@ -58,14 +59,14 @@ thunar_compact_view_class_init (ThunarCompactViewClass *klass)
   thunarstandard_view_class->zoom_level_property_name = "last-compact-view-zoom-level";
 
   /* override ThunarAbstractIconView default row spacing */
-  gtk_widget_class_install_style_property(gtkwidget_class, g_param_spec_int (
-          "row-spacing",                //name
-          "row-spacing",                //nick
-          "space between rows in px",   //blurb
-          0,                            //min
-          100,                          //max
-          0,                            //default
-          G_PARAM_READWRITE));         //flags
+  gtk_widget_class_install_style_property (gtkwidget_class, g_param_spec_int (
+                                                            "row-spacing",              // name
+                                                            "row-spacing",              // nick
+                                                            "space between rows in px", // blurb
+                                                            0,                          // min
+                                                            100,                        // max
+                                                            0,                          // default
+                                                            G_PARAM_READWRITE));        // flags
 }
 
 
@@ -73,7 +74,9 @@ thunar_compact_view_class_init (ThunarCompactViewClass *klass)
 static void
 thunar_compact_view_init (ThunarCompactView *compact_view)
 {
- /* initialize the icon view properties */
+  gboolean max_chars;
+
+  /* initialize the icon view properties */
   exo_icon_view_set_margin (EXO_ICON_VIEW (gtk_bin_get_child (GTK_BIN (compact_view))), 3);
   exo_icon_view_set_layout_mode (EXO_ICON_VIEW (gtk_bin_get_child (GTK_BIN (compact_view))), EXO_ICON_VIEW_LAYOUT_COLS);
   exo_icon_view_set_orientation (EXO_ICON_VIEW (gtk_bin_get_child (GTK_BIN (compact_view))), GTK_ORIENTATION_HORIZONTAL);
@@ -83,18 +86,25 @@ thunar_compact_view_init (ThunarCompactView *compact_view)
                 "ypad", 2u,
                 NULL);
 
-  /* setup the name renderer (wrap only very long names) */
+  g_object_get (G_OBJECT (THUNAR_STANDARD_VIEW (compact_view)->preferences), "misc-compact-view-max-chars", &max_chars, NULL);
+
+  /* setup the name renderer */
   g_object_set (G_OBJECT (THUNAR_STANDARD_VIEW (compact_view)->name_renderer),
-                "wrap-mode", PANGO_WRAP_WORD_CHAR,
-                "wrap-width", 1280,
                 "xalign", 0.0f,
                 "yalign", 0.5f,
                 NULL);
+
+  /* setup ellipsization */
+  if (max_chars > 0)
+    g_object_set (G_OBJECT (THUNAR_STANDARD_VIEW (compact_view)->name_renderer),
+                  "ellipsize", PANGO_ELLIPSIZE_MIDDLE,
+                  "width-chars", max_chars,
+                  NULL);
 }
 
 
 
-static AtkObject*
+static AtkObject *
 thunar_compact_view_get_accessible (GtkWidget *widget)
 {
   AtkObject *object;
@@ -112,6 +122,3 @@ thunar_compact_view_get_accessible (GtkWidget *widget)
 
   return object;
 }
-
-
-

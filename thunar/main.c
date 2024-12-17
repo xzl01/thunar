@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #include <stdio.h>
@@ -33,22 +33,22 @@
 #include <gio/gdesktopappinfo.h>
 #endif
 
-#include <xfconf/xfconf.h>
+#include "thunar/thunar-application.h"
+#include "thunar/thunar-gobject-extensions.h"
+#include "thunar/thunar-notify.h"
+#include "thunar/thunar-preferences.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-session-client.h"
 
-#include <thunar/thunar-application.h>
-#include <thunar/thunar-gobject-extensions.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-notify.h>
-#include <thunar/thunar-session-client.h>
-#include <thunar/thunar-preferences.h>
+#include <xfconf/xfconf.h>
 
 
 
 int
 main (int argc, char **argv)
 {
-  ThunarApplication   *application;
-  GError              *error = NULL;
+  ThunarApplication *application;
+  GError            *error = NULL;
 
   /* setup translation domain */
   xfce_textdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR, "UTF-8");
@@ -66,7 +66,7 @@ main (int argc, char **argv)
   /* initialize xfconf */
   if (!xfconf_init (&error))
     {
-      g_printerr (PACKAGE_NAME ": Failed to initialize Xfconf: %s\n\n", error->message);
+      g_warning (PACKAGE_NAME ": Failed to initialize Xfconf: %s", error->message);
       g_clear_error (&error);
 
       /* disable get/set properties */

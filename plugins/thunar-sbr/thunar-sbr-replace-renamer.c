@@ -29,12 +29,12 @@
 #include <string.h>
 #endif
 
-#ifdef HAVE_PCRE
-#include <pcre.h>
+#ifdef HAVE_PCRE2
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
 #endif
 
-#include <exo/exo.h>
-
+#include <libxfce4util/libxfce4util.h>
 #include <thunar-sbr/thunar-sbr-replace-renamer.h>
 
 
@@ -51,24 +51,31 @@ enum
 
 
 
-static void   thunar_sbr_replace_renamer_finalize     (GObject                      *object);
-static void   thunar_sbr_replace_renamer_get_property (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       GValue                       *value,
-                                                       GParamSpec                   *pspec);
-static void   thunar_sbr_replace_renamer_set_property (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       const GValue                 *value,
-                                                       GParamSpec                   *pspec);
-static void   thunar_sbr_replace_renamer_realize      (GtkWidget                    *widget);
-static gchar *thunar_sbr_replace_renamer_process      (ThunarxRenamer               *renamer,
-                                                       ThunarxFileInfo              *file,
-                                                       const gchar                  *text,
-                                                       guint                         idx);
-#ifdef HAVE_PCRE
-static gchar *thunar_sbr_replace_renamer_pcre_exec    (ThunarSbrReplaceRenamer      *replace_renamer,
-                                                       const gchar                  *text);
-static void   thunar_sbr_replace_renamer_pcre_update  (ThunarSbrReplaceRenamer      *replace_renamer);
+static void
+thunar_sbr_replace_renamer_finalize (GObject *object);
+static void
+thunar_sbr_replace_renamer_get_property (GObject    *object,
+                                         guint       prop_id,
+                                         GValue     *value,
+                                         GParamSpec *pspec);
+static void
+thunar_sbr_replace_renamer_set_property (GObject      *object,
+                                         guint         prop_id,
+                                         const GValue *value,
+                                         GParamSpec   *pspec);
+static void
+thunar_sbr_replace_renamer_realize (GtkWidget *widget);
+static gchar *
+thunar_sbr_replace_renamer_process (ThunarxRenamer  *renamer,
+                                    ThunarxFileInfo *file,
+                                    const gchar     *text,
+                                    guint            idx);
+#ifdef HAVE_PCRE2
+static gchar *
+thunar_sbr_replace_renamer_pcre_exec (ThunarSbrReplaceRenamer *replace_renamer,
+                                      const gchar             *text);
+static void
+thunar_sbr_replace_renamer_pcre_update (ThunarSbrReplaceRenamer *replace_renamer);
 #endif
 
 
@@ -88,12 +95,12 @@ struct _ThunarSbrReplaceRenamer
   gchar         *replacement;
 
   /* TRUE if PCRE is available and supports UTF-8 */
-  gint           regexp_supported;
+  gint utf8_regexp_supported;
 
   /* PCRE compiled pattern */
-#ifdef HAVE_PCRE
-  pcre          *pcre_pattern;
-  gint           pcre_capture_count;
+#ifdef HAVE_PCRE2
+  pcre2_code *pcre_pattern;
+  gint        pcre_capture_count;
 #endif
 };
 
@@ -186,11 +193,18 @@ thunar_sbr_replace_renamer_init (ThunarSbrReplaceRenamer *replace_renamer)
   GtkWidget      *label;
   GtkWidget      *entry;
   GtkWidget      *button;
+  uint32_t        pcre2_compiled_widths;
 
-#ifdef HAVE_PCRE
+  replace_renamer->utf8_regexp_supported = FALSE;
+
+#ifdef HAVE_PCRE2
   /* check if PCRE supports UTF-8 */
-  if (pcre_config (PCRE_CONFIG_UTF8, &replace_renamer->regexp_supported) != 0)
-    replace_renamer->regexp_supported = FALSE;
+  if (pcre2_config (PCRE2_CONFIG_COMPILED_WIDTHS, &pcre2_compiled_widths) >= 0)
+    {
+      /* bit0 indicates 8-bit support. bit1 and bit2 indicate 16-bit and 32-bit support respectively. */
+      if ((pcre2_compiled_widths & (1 << 0)) != 0)
+        replace_renamer->utf8_regexp_supported = TRUE;
+    }
 #endif
 
   grid = gtk_grid_new ();
@@ -206,7 +220,7 @@ thunar_sbr_replace_renamer_init (ThunarSbrReplaceRenamer *replace_renamer)
 
   replace_renamer->pattern_entry = gtk_entry_new ();
   gtk_entry_set_activates_default (GTK_ENTRY (replace_renamer->pattern_entry), TRUE);
-  exo_mutual_binding_new (G_OBJECT (replace_renamer->pattern_entry), "text", G_OBJECT (replace_renamer), "pattern");
+  g_object_bind_property (G_OBJECT (replace_renamer->pattern_entry), "text", G_OBJECT (replace_renamer), "pattern", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_widget_set_tooltip_text (replace_renamer->pattern_entry, _("Enter the text to search for in the file names."));
   gtk_widget_set_hexpand (replace_renamer->pattern_entry, TRUE);
   gtk_grid_attach (GTK_GRID (grid), replace_renamer->pattern_entry, 1, 0, 1, 1);
@@ -219,14 +233,15 @@ thunar_sbr_replace_renamer_init (ThunarSbrReplaceRenamer *replace_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   button = gtk_check_button_new_with_mnemonic (_("Regular _Expression"));
-  exo_mutual_binding_new (G_OBJECT (button), "active", G_OBJECT (replace_renamer), "regexp");
+  g_object_bind_property (G_OBJECT (button), "active", G_OBJECT (replace_renamer), "regexp", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_widget_set_tooltip_text (button, _("If you enable this option, the pattern will be treated as a regular expression and "
                                          "matched using the Perl-compatible regular expressions (PCRE). Check the documentation "
                                          "for details about the regular expression syntax."));
   gtk_grid_attach (GTK_GRID (grid), button, 2, 0, 1, 1);
-  gtk_widget_set_sensitive (button, replace_renamer->regexp_supported);
+  gtk_widget_set_sensitive (button, replace_renamer->utf8_regexp_supported);
   gtk_widget_show (button);
 
   label = gtk_label_new_with_mnemonic (_("Replace _With:"));
@@ -236,7 +251,7 @@ thunar_sbr_replace_renamer_init (ThunarSbrReplaceRenamer *replace_renamer)
 
   entry = gtk_entry_new ();
   gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
-  exo_mutual_binding_new (G_OBJECT (entry), "text", G_OBJECT (replace_renamer), "replacement");
+  g_object_bind_property (G_OBJECT (entry), "text", G_OBJECT (replace_renamer), "replacement", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_widget_set_tooltip_text (entry, _("Enter the text that should be used as replacement for the pattern above."));
   gtk_widget_set_hexpand (entry, TRUE);
   gtk_grid_attach (GTK_GRID (grid), entry, 1, 1, 1, 1);
@@ -249,9 +264,10 @@ thunar_sbr_replace_renamer_init (ThunarSbrReplaceRenamer *replace_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   button = gtk_check_button_new_with_mnemonic (_("C_ase Sensitive Search"));
-  exo_mutual_binding_new (G_OBJECT (button), "active", G_OBJECT (replace_renamer), "case-sensitive");
+  g_object_bind_property (G_OBJECT (button), "active", G_OBJECT (replace_renamer), "case-sensitive", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_widget_set_tooltip_text (button, _("If you enable this option, the pattern will be searched in a case-sensitive manner. "
                                          "The default is to use a case-insensitive search."));
   gtk_grid_attach (GTK_GRID (grid), button, 2, 1, 1, 1);
@@ -266,9 +282,9 @@ thunar_sbr_replace_renamer_finalize (GObject *object)
   ThunarSbrReplaceRenamer *replace_renamer = THUNAR_SBR_REPLACE_RENAMER (object);
 
   /* release the PCRE pattern (if any) */
-#ifdef HAVE_PCRE
+#ifdef HAVE_PCRE2
   if (G_UNLIKELY (replace_renamer->pcre_pattern != NULL))
-    pcre_free (replace_renamer->pcre_pattern);
+    pcre2_code_free (replace_renamer->pcre_pattern);
 #endif
 
   /* release the strings */
@@ -354,7 +370,7 @@ thunar_sbr_replace_renamer_realize (GtkWidget *widget)
   /* realize the widget */
   (*GTK_WIDGET_CLASS (thunar_sbr_replace_renamer_parent_class)->realize) (widget);
 
-#ifdef HAVE_PCRE
+#ifdef HAVE_PCRE2
   /* update the PCRE pattern */
   thunar_sbr_replace_renamer_pcre_update (THUNAR_SBR_REPLACE_RENAMER (widget));
 #endif
@@ -362,7 +378,7 @@ thunar_sbr_replace_renamer_realize (GtkWidget *widget)
 
 
 
-static gchar*
+static gchar *
 tsrr_replace (const gchar *text,
               const gchar *pattern,
               const gchar *replacement,
@@ -410,7 +426,7 @@ tsrr_replace (const gchar *text,
 
 
 
-static gchar*
+static gchar *
 thunar_sbr_replace_renamer_process (ThunarxRenamer  *renamer,
                                     ThunarxFileInfo *file,
                                     const gchar     *text,
@@ -425,7 +441,7 @@ thunar_sbr_replace_renamer_process (ThunarxRenamer  *renamer,
   /* check if we should use regular expression */
   if (G_UNLIKELY (replace_renamer->regexp))
     {
-#ifdef HAVE_PCRE
+#ifdef HAVE_PCRE2
       /* check if the pattern failed to compile */
       if (G_UNLIKELY (replace_renamer->pcre_pattern == NULL))
         return g_strdup (text);
@@ -441,125 +457,59 @@ thunar_sbr_replace_renamer_process (ThunarxRenamer  *renamer,
 
 
 
-#ifdef HAVE_PCRE
-static gchar*
+#ifdef HAVE_PCRE2
+static gchar *
 thunar_sbr_replace_renamer_pcre_exec (ThunarSbrReplaceRenamer *replace_renamer,
                                       const gchar             *subject)
 {
-  const gchar *r;
-  GString     *result;
-  gint         second;
-  gint         first;
-  gint         idx;
-  gint        *ovec;
-  gint         olen;
-  gint         rc;
+  GString    *result;
+  int         error;
+  PCRE2_SIZE  erroffset;
+  gchar       output[1024];
+  pcre2_code *compiled_pattern;
+  PCRE2_SIZE  outlen;
+  int         n_substitutions; /* number of substitutions that were carried out */
 
-  /* guess an initial ovec size */
-  olen = (replace_renamer->pcre_capture_count + 10) * 3;
-  ovec = g_new0 (gint, olen);
-
-  /* try to match the subject (increasing ovec on-demand) */
-  for (rc = 0; rc <= 0; )
-    {
-      /* try to exec, will return 0 if the ovec is too small */
-      rc = pcre_exec (replace_renamer->pcre_pattern, NULL, subject, strlen (subject), 0, PCRE_NOTEMPTY, ovec, olen);
-      if (G_UNLIKELY (rc < 0))
-        {
-          /* no match or error */
-          g_free (ovec);
-          return g_strdup (subject);
-        }
-      else if (rc == 0)
-        {
-          /* ovec too small, try to increase */
-          olen += 18;
-          ovec = g_realloc (ovec, olen * sizeof (gint));
-        }
-    }
-
-  /* allocate a string for the result */
   result = g_string_sized_new (32);
 
-  /* append the text before the match */
-  g_string_append_len (result, subject, ovec[0]);
+  compiled_pattern = pcre2_compile_8 ((PCRE2_SPTR) replace_renamer->pattern,
+                                      PCRE2_ZERO_TERMINATED,
+                                      0,
+                                      &error,
+                                      &erroffset,
+                                      0);
+  if (compiled_pattern == NULL)
+    return g_strdup (subject);
 
-  /* apply the replacement */
-  for (r = replace_renamer->replacement; *r != '\0'; r = g_utf8_next_char (r))
+  pcre2_jit_compile (compiled_pattern, PCRE2_JIT_COMPLETE);
+
+  outlen = sizeof (output) / sizeof (PCRE2_UCHAR);
+
+  n_substitutions = pcre2_substitute (compiled_pattern,
+                                      (PCRE2_SPTR) subject,
+                                      PCRE2_ZERO_TERMINATED,
+                                      0,
+                                      PCRE2_SUBSTITUTE_GLOBAL | PCRE2_SUBSTITUTE_EXTENDED,
+                                      0,
+                                      0,
+                                      (PCRE2_SPTR) replace_renamer->replacement,
+                                      PCRE2_ZERO_TERMINATED,
+                                      (PCRE2_UCHAR *) output,
+                                      &outlen);
+
+  if (n_substitutions < 0)
     {
-      if (G_UNLIKELY ((r[0] == '\\' || r[0] == '$') && r[1] != '\0'))
-        {
-          /* skip the first char ($ or \) */
-          r += 1;
-
-          /* default to no subst */
-          first = 0;
-          second = 0;
-
-          /* check the char after the \ or $ */
-          if (r[0] == '+' && rc > 1)
-            {
-              /* \+ and $+ is replaced with the last subpattern */
-              first = ovec[(rc - 1) * 2];
-              second = ovec[(rc - 1) * 2 + 1];
-            }
-          else if (r[0] == '&')
-            {
-              /* \& and $& is replaced with the first subpattern (the whole match) */
-              first = ovec[0];
-              second = ovec[1];
-            }
-          else if (r[0] == '`')
-            {
-              /* \` and $` is replaced with the text before the whole match */
-              first = 0;
-              second = ovec[0];
-            }
-          else if (r[0] == '\'')
-            {
-              /* \' and $' is replaced with the text after the whole match */
-              first = ovec[1];
-              second = strlen (subject) - 1;
-            }
-          else if (g_ascii_isdigit (r[0]))
-            {
-              /* \<num> and $<num> is replaced with the <num>th subpattern */
-              idx = (r[0] - '0');
-              if (G_LIKELY (idx >= 0 && idx < rc))
-                {
-                  first = ovec[2 * idx];
-                  second = ovec[2 * idx + 1];
-                }
-            }
-          else if (r[-1] == r[0])
-            {
-              /* just add the $ or \ char */
-              g_string_append_c (result, r[0]);
-              continue;
-            }
-          else
-            {
-              /* just ignore the $ or \ char */
-              continue;
-            }
-
-          /* substitute the string */
-          g_string_append_len (result, subject + first, second - first);
-        }
-      else
-        {
-          /* just append the unichar */
-          g_string_append_unichar (result, g_utf8_get_char (r));
-        }
+      PCRE2_UCHAR buffer[256];
+      pcre2_get_error_message (error, buffer, sizeof (buffer));
+      g_warning ("PCRE2 substitution failed at offset %d: %s\n", (int) erroffset, buffer);
+      return g_strdup (subject);
     }
 
-  /* append the text after the match */
-  g_string_append (result, subject + ovec[1]);
+  pcre2_code_free (compiled_pattern);
 
-  /* release the output vector */
-  g_free (ovec);
+  for (size_t i = 0; i < outlen; i++)
+    g_string_append_c (result, output[i]);
 
-  /* return the new name */
   return g_string_free (result, FALSE);
 }
 
@@ -573,26 +523,24 @@ thunar_sbr_replace_renamer_pcre_update (ThunarSbrReplaceRenamer *replace_renamer
   gchar       *message;
   glong        offset;
   gint         error_offset = -1;
+  int          error;
+  PCRE2_SIZE   erroffset;
 
   /* pre-compile the pattern if regexp is enabled */
   if (G_UNLIKELY (replace_renamer->regexp))
     {
       /* release the previous pattern (if any) */
       if (G_LIKELY (replace_renamer->pcre_pattern != NULL))
-        pcre_free (replace_renamer->pcre_pattern);
+        pcre2_code_free (replace_renamer->pcre_pattern);
 
       /* try to compile the new pattern */
-      replace_renamer->pcre_pattern = pcre_compile (replace_renamer->pattern, (replace_renamer->case_sensitive ? 0 : PCRE_CASELESS) | PCRE_UTF8,
-                                                    &error_message, &error_offset, 0);
-      if (G_LIKELY (replace_renamer->pcre_pattern != NULL))
+      replace_renamer->pcre_pattern = pcre2_compile ((PCRE2_SPTR) replace_renamer->pattern, PCRE2_ZERO_TERMINATED, 0, &error, &erroffset, 0);
+
+      if (replace_renamer->pcre_pattern == NULL)
         {
-          /* determine the subpattern capture count */
-          if (pcre_fullinfo (replace_renamer->pcre_pattern, NULL, PCRE_INFO_CAPTURECOUNT, &replace_renamer->pcre_capture_count) != 0)
-            {
-              /* shouldn't happen, but just to be sure */
-              pcre_free (replace_renamer->pcre_pattern);
-              replace_renamer->pcre_pattern = NULL;
-            }
+          PCRE2_UCHAR buffer[256];
+          pcre2_get_error_message (error, buffer, sizeof (buffer));
+          g_warning ("PCRE2 compilation failed at offset %d: %s\n", (int) erroffset, buffer);
         }
     }
 
@@ -644,7 +592,7 @@ thunar_sbr_replace_renamer_pcre_update (ThunarSbrReplaceRenamer *replace_renamer
  *
  * Return value: the newly allocated #ThunarSbrReplaceRenamer.
  **/
-ThunarSbrReplaceRenamer*
+ThunarSbrReplaceRenamer *
 thunar_sbr_replace_renamer_new (void)
 {
   return g_object_new (THUNAR_SBR_TYPE_REPLACE_RENAMER,
@@ -695,7 +643,7 @@ thunar_sbr_replace_renamer_set_case_sensitive (ThunarSbrReplaceRenamer *replace_
       /* apply the new value */
       replace_renamer->case_sensitive = case_sensitive;
 
-#ifdef HAVE_PCRE
+#ifdef HAVE_PCRE2
       /* pre-compile the pattern */
       thunar_sbr_replace_renamer_pcre_update (replace_renamer);
 #endif
@@ -718,7 +666,7 @@ thunar_sbr_replace_renamer_set_case_sensitive (ThunarSbrReplaceRenamer *replace_
  *
  * Return value: the search pattern for @replace_renamer.
  **/
-const gchar*
+const gchar *
 thunar_sbr_replace_renamer_get_pattern (ThunarSbrReplaceRenamer *replace_renamer)
 {
   g_return_val_if_fail (THUNAR_SBR_IS_REPLACE_RENAMER (replace_renamer), NULL);
@@ -742,13 +690,13 @@ thunar_sbr_replace_renamer_set_pattern (ThunarSbrReplaceRenamer *replace_renamer
   g_return_if_fail (g_utf8_validate (pattern, -1, NULL));
 
   /* check if we have a new pattern */
-  if (!exo_str_is_equal (replace_renamer->pattern, pattern))
+  if (g_strcmp0 (replace_renamer->pattern, pattern) != 0)
     {
       /* apply the new value */
       g_free (replace_renamer->pattern);
       replace_renamer->pattern = g_strdup (pattern);
 
-#ifdef HAVE_PCRE
+#ifdef HAVE_PCRE2
       /* pre-compile the pattern */
       thunar_sbr_replace_renamer_pcre_update (replace_renamer);
 #endif
@@ -796,7 +744,7 @@ thunar_sbr_replace_renamer_set_regexp (ThunarSbrReplaceRenamer *replace_renamer,
   g_return_if_fail (THUNAR_SBR_IS_REPLACE_RENAMER (replace_renamer));
 
   /* normalize the value */
-  regexp = (!!regexp && replace_renamer->regexp_supported);
+  regexp = (!!regexp && replace_renamer->utf8_regexp_supported);
 
   /* check if we have a new value */
   if (G_LIKELY (replace_renamer->regexp != regexp))
@@ -804,7 +752,7 @@ thunar_sbr_replace_renamer_set_regexp (ThunarSbrReplaceRenamer *replace_renamer,
       /* apply the new value */
       replace_renamer->regexp = regexp;
 
-#ifdef HAVE_PCRE
+#ifdef HAVE_PCRE2
       /* pre-compile the pattern */
       thunar_sbr_replace_renamer_pcre_update (replace_renamer);
 #endif
@@ -827,7 +775,7 @@ thunar_sbr_replace_renamer_set_regexp (ThunarSbrReplaceRenamer *replace_renamer,
  *
  * Return value: the replacement for @replace_renamer.
  **/
-const gchar*
+const gchar *
 thunar_sbr_replace_renamer_get_replacement (ThunarSbrReplaceRenamer *replace_renamer)
 {
   g_return_val_if_fail (THUNAR_SBR_IS_REPLACE_RENAMER (replace_renamer), NULL);
@@ -851,7 +799,7 @@ thunar_sbr_replace_renamer_set_replacement (ThunarSbrReplaceRenamer *replace_ren
   g_return_if_fail (g_utf8_validate (replacement, -1, NULL));
 
   /* check if we have a new replacement */
-  if (!exo_str_is_equal (replace_renamer->replacement, replacement))
+  if (g_strcmp0 (replace_renamer->replacement, replacement) != 0)
     {
       /* apply the setting */
       g_free (replace_renamer->replacement);
@@ -864,6 +812,3 @@ thunar_sbr_replace_renamer_set_replacement (ThunarSbrReplaceRenamer *replace_ren
       g_object_notify (G_OBJECT (replace_renamer), "replacement");
     }
 }
-
-
-

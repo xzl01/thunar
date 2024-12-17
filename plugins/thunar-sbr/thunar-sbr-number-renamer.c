@@ -32,8 +32,7 @@
 #include <string.h>
 #endif
 
-#include <exo/exo.h>
-
+#include <libxfce4util/libxfce4util.h>
 #include <thunar-sbr/thunar-sbr-number-renamer.h>
 
 
@@ -50,21 +49,27 @@ enum
 
 
 
-static void   thunar_sbr_number_renamer_finalize      (GObject                      *object);
-static void   thunar_sbr_number_renamer_get_property  (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       GValue                       *value,
-                                                       GParamSpec                   *pspec);
-static void   thunar_sbr_number_renamer_set_property  (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       const GValue                 *value,
-                                                       GParamSpec                   *pspec);
-static void   thunar_sbr_number_renamer_realize       (GtkWidget                    *widget);
-static gchar *thunar_sbr_number_renamer_process       (ThunarxRenamer               *renamer,
-                                                       ThunarxFileInfo              *file,
-                                                       const gchar                  *text,
-                                                       guint                         idx);
-static void   thunar_sbr_number_renamer_update        (ThunarSbrNumberRenamer       *number_renamer);
+static void
+thunar_sbr_number_renamer_finalize (GObject *object);
+static void
+thunar_sbr_number_renamer_get_property (GObject    *object,
+                                        guint       prop_id,
+                                        GValue     *value,
+                                        GParamSpec *pspec);
+static void
+thunar_sbr_number_renamer_set_property (GObject      *object,
+                                        guint         prop_id,
+                                        const GValue *value,
+                                        GParamSpec   *pspec);
+static void
+thunar_sbr_number_renamer_realize (GtkWidget *widget);
+static gchar *
+thunar_sbr_number_renamer_process (ThunarxRenamer  *renamer,
+                                   ThunarxFileInfo *file,
+                                   const gchar     *text,
+                                   guint            idx);
+static void
+thunar_sbr_number_renamer_update (ThunarSbrNumberRenamer *number_renamer);
 
 
 
@@ -75,9 +80,9 @@ struct _ThunarSbrNumberRenamerClass
 
 struct _ThunarSbrNumberRenamer
 {
-  ThunarxRenamer      __parent__;
+  ThunarxRenamer __parent__;
 
-  GtkWidget          *start_entry;
+  GtkWidget *start_entry;
 
   ThunarSbrNumberMode mode;
   gchar              *start;
@@ -191,7 +196,7 @@ thunar_sbr_number_renamer_init (ThunarSbrNumberRenamer *number_renamer)
   klass = g_type_class_ref (THUNAR_SBR_TYPE_NUMBER_MODE);
   for (n = 0; n < klass->n_values; ++n)
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(klass->values[n].value_nick));
-  exo_mutual_binding_new (G_OBJECT (number_renamer), "mode", G_OBJECT (combo), "active");
+  g_object_bind_property (G_OBJECT (number_renamer), "mode", G_OBJECT (combo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (grid), combo, 1, 0, 1, 1);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), combo);
   g_type_class_unref (klass);
@@ -203,6 +208,7 @@ thunar_sbr_number_renamer_init (ThunarSbrNumberRenamer *number_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   number_renamer->start_entry = gtk_entry_new ();
   gtk_entry_set_max_length (GTK_ENTRY (number_renamer->start_entry), 8);
@@ -210,7 +216,7 @@ thunar_sbr_number_renamer_init (ThunarSbrNumberRenamer *number_renamer)
   gtk_entry_set_alignment (GTK_ENTRY (number_renamer->start_entry), 1.0f);
   gtk_entry_set_activates_default (GTK_ENTRY (number_renamer->start_entry), TRUE);
   gtk_widget_set_hexpand (GTK_WIDGET (number_renamer->start_entry), TRUE);
-  exo_mutual_binding_new (G_OBJECT (number_renamer->start_entry), "text", G_OBJECT (number_renamer), "start");
+  g_object_bind_property (G_OBJECT (number_renamer->start_entry), "text", G_OBJECT (number_renamer), "start", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (grid), number_renamer->start_entry, 3, 0, 1, 1);
   gtk_widget_show (number_renamer->start_entry);
 
@@ -225,6 +231,7 @@ thunar_sbr_number_renamer_init (ThunarSbrNumberRenamer *number_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   label = gtk_label_new_with_mnemonic (_("Text _Format:"));
   gtk_grid_attach (GTK_GRID (grid), label, 0, 1, 1, 1);
@@ -234,7 +241,7 @@ thunar_sbr_number_renamer_init (ThunarSbrNumberRenamer *number_renamer)
   klass = g_type_class_ref (THUNAR_SBR_TYPE_TEXT_MODE);
   for (n = 0; n < klass->n_values; ++n)
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(klass->values[n].value_nick));
-  exo_mutual_binding_new (G_OBJECT (number_renamer), "text-mode", G_OBJECT (combo), "active");
+  g_object_bind_property (G_OBJECT (number_renamer), "text-mode", G_OBJECT (combo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (grid), combo, 1, 1, 1, 1);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), combo);
   g_type_class_unref (klass);
@@ -246,11 +253,12 @@ thunar_sbr_number_renamer_init (ThunarSbrNumberRenamer *number_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   entry = gtk_entry_new ();
   gtk_entry_set_width_chars (GTK_ENTRY (entry), 12);
   gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
-  exo_mutual_binding_new (G_OBJECT (entry), "text", G_OBJECT (number_renamer), "text");
+  g_object_bind_property (G_OBJECT (entry), "text", G_OBJECT (number_renamer), "text", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (grid), entry, 3, 1, 1, 1);
   gtk_widget_show (entry);
 
@@ -266,6 +274,7 @@ thunar_sbr_number_renamer_init (ThunarSbrNumberRenamer *number_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 }
 
 
@@ -364,7 +373,7 @@ thunar_sbr_number_renamer_realize (GtkWidget *widget)
 
 
 
-static gchar*
+static gchar *
 thunar_sbr_number_renamer_process (ThunarxRenamer  *renamer,
                                    ThunarxFileInfo *file,
                                    const gchar     *text,
@@ -389,8 +398,8 @@ thunar_sbr_number_renamer_process (ThunarxRenamer  *renamer,
       /* "start" property must be 'a', 'b', 'c', etc. */
       start = *number_renamer->start;
       invalid = (strlen (number_renamer->start) != 1
-              || g_ascii_tolower (start) < 'a'
-              || g_ascii_tolower (start) > 'z');
+                 || g_unichar_tolower (start) < 'a'
+                 || g_unichar_tolower (start) > 'z');
     }
 
   /* check if we have invalid settings */
@@ -470,8 +479,8 @@ thunar_sbr_number_renamer_process (ThunarxRenamer  *renamer,
 static void
 thunar_sbr_number_renamer_update (ThunarSbrNumberRenamer *number_renamer)
 {
-  gboolean  invalid = TRUE;
-  gchar    *endp;
+  gboolean invalid = TRUE;
+  gchar   *endp;
 
   /* check whether "start" is valid for the "mode" */
   if (number_renamer->mode < THUNAR_SBR_NUMBER_MODE_ABC)
@@ -484,8 +493,8 @@ thunar_sbr_number_renamer_update (ThunarSbrNumberRenamer *number_renamer)
     {
       /* "start" property must be 'a', 'b', 'c', etc. */
       invalid = (strlen (number_renamer->start) != 1
-              || g_ascii_tolower (*number_renamer->start) < 'a'
-              || g_ascii_tolower (*number_renamer->start) > 'z');
+                 || g_unichar_tolower (*number_renamer->start) < 'a'
+                 || g_unichar_tolower (*number_renamer->start) > 'z');
     }
 
   /* check if the start entry is realized */
@@ -493,9 +502,9 @@ thunar_sbr_number_renamer_update (ThunarSbrNumberRenamer *number_renamer)
     {
       /* highlight invalid input by using theme specific colors */
       if (G_UNLIKELY (invalid))
-          gtk_style_context_add_class (gtk_widget_get_style_context (GTK_WIDGET (number_renamer->start_entry)), "error");
+        gtk_style_context_add_class (gtk_widget_get_style_context (GTK_WIDGET (number_renamer->start_entry)), "error");
       else
-          gtk_style_context_remove_class (gtk_widget_get_style_context (GTK_WIDGET (number_renamer->start_entry)), "error");
+        gtk_style_context_remove_class (gtk_widget_get_style_context (GTK_WIDGET (number_renamer->start_entry)), "error");
     }
 
   /* notify everybody that we have a new state */
@@ -511,7 +520,7 @@ thunar_sbr_number_renamer_update (ThunarSbrNumberRenamer *number_renamer)
  *
  * Return value: the newly allocated #ThunarSbrNumberRenamer.
  **/
-ThunarSbrNumberRenamer*
+ThunarSbrNumberRenamer *
 thunar_sbr_number_renamer_new (void)
 {
   return g_object_new (THUNAR_SBR_TYPE_NUMBER_RENAMER,
@@ -575,7 +584,7 @@ thunar_sbr_number_renamer_set_mode (ThunarSbrNumberRenamer *number_renamer,
  *
  * Return value: the start for @number_renamer.
  **/
-const gchar*
+const gchar *
 thunar_sbr_number_renamer_get_start (ThunarSbrNumberRenamer *number_renamer)
 {
   g_return_val_if_fail (THUNAR_SBR_IS_NUMBER_RENAMER (number_renamer), NULL);
@@ -598,7 +607,7 @@ thunar_sbr_number_renamer_set_start (ThunarSbrNumberRenamer *number_renamer,
   g_return_if_fail (THUNAR_SBR_IS_NUMBER_RENAMER (number_renamer));
 
   /* check if we have a new start */
-  if (!exo_str_is_equal (number_renamer->start, start))
+  if (g_strcmp0 (number_renamer->start, start) != 0)
     {
       /* apply the new start */
       g_free (number_renamer->start);
@@ -622,7 +631,7 @@ thunar_sbr_number_renamer_set_start (ThunarSbrNumberRenamer *number_renamer,
  *
  * Return value: the text for @number_renamer.
  **/
-const gchar*
+const gchar *
 thunar_sbr_number_renamer_get_text (ThunarSbrNumberRenamer *number_renamer)
 {
   g_return_val_if_fail (THUNAR_SBR_IS_NUMBER_RENAMER (number_renamer), NULL);
@@ -645,7 +654,7 @@ thunar_sbr_number_renamer_set_text (ThunarSbrNumberRenamer *number_renamer,
   g_return_if_fail (THUNAR_SBR_IS_NUMBER_RENAMER (number_renamer));
 
   /* check if we have a new text */
-  if (G_LIKELY (!exo_str_is_equal (number_renamer->text, text)))
+  if (G_LIKELY (g_strcmp0 (number_renamer->text, text) != 0))
     {
       /* apply the new text */
       g_free (number_renamer->text);
@@ -704,7 +713,3 @@ thunar_sbr_number_renamer_set_text_mode (ThunarSbrNumberRenamer *number_renamer,
       g_object_notify (G_OBJECT (number_renamer), "text-mode");
     }
 }
-
-
-
-

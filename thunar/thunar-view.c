@@ -18,30 +18,33 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-view.h>
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-view.h"
+
+#include <libxfce4util/libxfce4util.h>
 
 
 
-static void thunar_view_class_init (gpointer klass);
+static void
+thunar_view_class_init (gpointer klass);
 
 
 
 GType
 thunar_view_get_type (void)
 {
-  static volatile gsize type__volatile = 0;
-  GType                 type;
+  static gsize type__static = 0;
+  GType        type;
 
-  if (g_once_init_enter (&type__volatile))
+  if (g_once_init_enter (&type__static))
     {
       type = g_type_register_static_simple (G_TYPE_INTERFACE,
-                                            I_("ThunarView"),
+                                            I_ ("ThunarView"),
                                             sizeof (ThunarViewIface),
-                                            (GClassInitFunc) (void (*)(void)) thunar_view_class_init,
+                                            (GClassInitFunc) (void (*) (void)) thunar_view_class_init,
                                             0,
                                             NULL,
                                             0);
@@ -49,10 +52,10 @@ thunar_view_get_type (void)
       g_type_interface_add_prerequisite (type, GTK_TYPE_WIDGET);
       g_type_interface_add_prerequisite (type, THUNAR_TYPE_COMPONENT);
 
-      g_once_init_leave (&type__volatile, type);
+      g_once_init_leave (&type__static, type);
     }
 
-  return type__volatile;
+  return type__static;
 }
 
 
@@ -79,21 +82,6 @@ thunar_view_class_init (gpointer klass)
                                                              FALSE,
                                                              EXO_PARAM_READABLE));
 
-  /**
-   * ThunarView:statusbar-text:
-   *
-   * The text to be displayed in the status bar, which is associated
-   * with this #ThunarView instance. Implementations should invoke
-   * #g_object_notify() on this property, whenever they have a new
-   * text to be display in the status bar (e.g. the selection changed
-   * or similar).
-   **/
-  g_object_interface_install_property (klass,
-                                       g_param_spec_string ("statusbar-text",
-                                                            "statusbar-text",
-                                                            "statusbar-text",
-                                                            NULL,
-                                                            EXO_PARAM_READABLE));
 
   /**
    * ThunarView:show-hidden:
@@ -139,25 +127,6 @@ thunar_view_get_loading (ThunarView *view)
 {
   _thunar_return_val_if_fail (THUNAR_IS_VIEW (view), FALSE);
   return (*THUNAR_VIEW_GET_IFACE (view)->get_loading) (view);
-}
-
-
-
-/**
- * thunar_view_get_statusbar_text:
- * @view : a #ThunarView instance.
- *
- * Queries the text that should be displayed in the status bar
- * associated with @view.
- *
- * Return value: the text to be displayed in the status bar
- *               asssociated with @view.
- **/
-const gchar*
-thunar_view_get_statusbar_text (ThunarView *view)
-{
-  _thunar_return_val_if_fail (THUNAR_IS_VIEW (view), NULL);
-  return (*THUNAR_VIEW_GET_IFACE (view)->get_statusbar_text) (view);
 }
 
 
@@ -325,7 +294,7 @@ thunar_view_scroll_to_file (ThunarView *view,
 
 
 
-GList*
+GList *
 thunar_view_get_selected_files (ThunarView *view)
 {
   _thunar_return_val_if_fail (THUNAR_IS_VIEW (view), NULL);

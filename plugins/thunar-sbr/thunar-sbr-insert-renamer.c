@@ -22,8 +22,7 @@
 #include <config.h>
 #endif
 
-#include <exo/exo.h>
-
+#include <libxfce4util/libxfce4util.h>
 #include <thunar-sbr/thunar-sbr-insert-renamer.h>
 
 
@@ -40,19 +39,23 @@ enum
 
 
 
-static void   thunar_sbr_insert_renamer_finalize      (GObject                      *object);
-static void   thunar_sbr_insert_renamer_get_property  (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       GValue                       *value,
-                                                       GParamSpec                   *pspec);
-static void   thunar_sbr_insert_renamer_set_property  (GObject                      *object,
-                                                       guint                         prop_id,
-                                                       const GValue                 *value,
-                                                       GParamSpec                   *pspec);
-static gchar *thunar_sbr_insert_renamer_process       (ThunarxRenamer               *renamer,
-                                                       ThunarxFileInfo              *file,
-                                                       const gchar                  *text,
-                                                       guint                         idx);
+static void
+thunar_sbr_insert_renamer_finalize (GObject *object);
+static void
+thunar_sbr_insert_renamer_get_property (GObject    *object,
+                                        guint       prop_id,
+                                        GValue     *value,
+                                        GParamSpec *pspec);
+static void
+thunar_sbr_insert_renamer_set_property (GObject      *object,
+                                        guint         prop_id,
+                                        const GValue *value,
+                                        GParamSpec   *pspec);
+static gchar *
+thunar_sbr_insert_renamer_process (ThunarxRenamer  *renamer,
+                                   ThunarxFileInfo *file,
+                                   const gchar     *text,
+                                   guint            idx);
 
 
 
@@ -171,7 +174,7 @@ thunar_sbr_insert_renamer_init (ThunarSbrInsertRenamer *insert_renamer)
   klass = g_type_class_ref (THUNAR_SBR_TYPE_INSERT_MODE);
   for (n = 0; n < klass->n_values; ++n)
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(klass->values[n].value_nick));
-  exo_mutual_binding_new (G_OBJECT (insert_renamer), "mode", G_OBJECT (combo), "active");
+  g_object_bind_property (G_OBJECT (insert_renamer), "mode", G_OBJECT (combo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (grid), combo, 0, 0, 1, 1);
   g_type_class_unref (klass);
   gtk_widget_show (combo);
@@ -182,7 +185,7 @@ thunar_sbr_insert_renamer_init (ThunarSbrInsertRenamer *insert_renamer)
 
   entry = gtk_entry_new ();
   gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
-  exo_mutual_binding_new (G_OBJECT (entry), "text", G_OBJECT (insert_renamer), "text");
+  g_object_bind_property (G_OBJECT (entry), "text", G_OBJECT (insert_renamer), "text", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (entry, TRUE);
   gtk_grid_attach (GTK_GRID (grid), entry, 2, 0, 1, 1);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), entry);
@@ -194,6 +197,7 @@ thunar_sbr_insert_renamer_init (ThunarSbrInsertRenamer *insert_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   label = gtk_label_new_with_mnemonic (_("_At position:"));
   gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
@@ -216,7 +220,7 @@ thunar_sbr_insert_renamer_init (ThunarSbrInsertRenamer *insert_renamer)
   gtk_widget_show (spinner);
 
   adjustment = gtk_spin_button_get_adjustment (GTK_SPIN_BUTTON (spinner));
-  exo_mutual_binding_new (G_OBJECT (insert_renamer), "offset", G_OBJECT (adjustment), "value");
+  g_object_bind_property (G_OBJECT (insert_renamer), "offset", G_OBJECT (adjustment), "value", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
 
   /* set Atk label relation for the entry */
   object = gtk_widget_get_accessible (spinner);
@@ -224,12 +228,13 @@ thunar_sbr_insert_renamer_init (ThunarSbrInsertRenamer *insert_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 
   combo = gtk_combo_box_text_new ();
   klass = g_type_class_ref (THUNAR_SBR_TYPE_OFFSET_MODE);
   for (n = 0; n < klass->n_values; ++n)
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(klass->values[n].value_nick));
-  exo_mutual_binding_new (G_OBJECT (insert_renamer), "offset-mode", G_OBJECT (combo), "active");
+  g_object_bind_property (G_OBJECT (insert_renamer), "offset-mode", G_OBJECT (combo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_box_pack_start (GTK_BOX (hbox), combo, FALSE, FALSE, 0);
   g_type_class_unref (klass);
   gtk_widget_show (combo);
@@ -318,7 +323,7 @@ thunar_sbr_insert_renamer_set_property (GObject      *object,
 
 
 
-static gchar*
+static gchar *
 thunar_sbr_insert_renamer_process (ThunarxRenamer  *renamer,
                                    ThunarxFileInfo *file,
                                    const gchar     *text,
@@ -379,7 +384,7 @@ thunar_sbr_insert_renamer_process (ThunarxRenamer  *renamer,
  *
  * Return value: the newly allocated #ThunarSbrInsertRenamer.
  **/
-ThunarSbrInsertRenamer*
+ThunarSbrInsertRenamer *
 thunar_sbr_insert_renamer_new (void)
 {
   return g_object_new (THUNAR_SBR_TYPE_INSERT_RENAMER,
@@ -535,7 +540,7 @@ thunar_sbr_insert_renamer_set_offset_mode (ThunarSbrInsertRenamer *insert_rename
  *
  * Return value: the text for @insert_renamer.
  **/
-const gchar*
+const gchar *
 thunar_sbr_insert_renamer_get_text (ThunarSbrInsertRenamer *insert_renamer)
 {
   g_return_val_if_fail (THUNAR_SBR_IS_INSERT_RENAMER (insert_renamer), NULL);
@@ -558,7 +563,7 @@ thunar_sbr_insert_renamer_set_text (ThunarSbrInsertRenamer *insert_renamer,
   g_return_if_fail (THUNAR_SBR_IS_INSERT_RENAMER (insert_renamer));
 
   /* check if we have a new text */
-  if (G_LIKELY (!exo_str_is_equal (insert_renamer->text, text)))
+  if (G_LIKELY (g_strcmp0 (insert_renamer->text, text) != 0))
     {
       /* apply the new text */
       g_free (insert_renamer->text);
@@ -571,5 +576,3 @@ thunar_sbr_insert_renamer_set_text (ThunarSbrInsertRenamer *insert_renamer,
       g_object_notify (G_OBJECT (insert_renamer), "text");
     }
 }
-
-

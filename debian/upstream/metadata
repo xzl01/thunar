@@ -1,2 +1,6 @@
-Name: thunar
-Repository: git://git.xfce.org/xfce/thunar
+Bug-Database: https://gitlab.xfce.org/xfce/thunar/-/issues
+Bug-Submit: https://gitlab.xfce.org/xfce/thunar/-/issues/new
+Changelog: https://gitlab.xfce.org/xfce/thunar/-/commits/master
+Documentation: https://docs.xfce.org/xfce/thunar/start
+Repository: https://gitlab.xfce.org/xfce/thunar.git
+Repository-Browse: https://gitlab.xfce.org/xfce/thunar

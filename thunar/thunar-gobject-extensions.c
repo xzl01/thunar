@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -33,16 +33,20 @@
 #include <string.h>
 #endif
 
-#include <exo/exo.h>
+#include "thunar/thunar-gobject-extensions.h"
 
-#include <thunar/thunar-gobject-extensions.h>
+#include <gio/gio.h>
 
 
 
-static void transform_string_to_boolean (const GValue *src, GValue *dst);
-static void transform_string_to_enum    (const GValue *src, GValue *dst);
-static void transform_string_to_int     (const GValue *src, GValue *dst);
-static void transform_string_to_uint    (const GValue *src, GValue *dst);
+static void
+transform_string_to_boolean (const GValue *src, GValue *dst);
+static void
+transform_string_to_enum (const GValue *src, GValue *dst);
+static void
+transform_string_to_int (const GValue *src, GValue *dst);
+static void
+transform_string_to_uint (const GValue *src, GValue *dst);
 
 
 
@@ -68,7 +72,7 @@ transform_string_to_enum (const GValue *src,
   for (n = 0; n < klass->n_values; ++n)
     {
       value = klass->values[n].value;
-      if (exo_str_is_equal (klass->values[n].value_name, g_value_get_string (src)))
+      if (g_strcmp0 (klass->values[n].value_name, g_value_get_string (src)) == 0)
         break;
     }
   g_type_class_unref (klass);
@@ -132,11 +136,11 @@ thunar_g_initialize_transformations (void)
  *
  * Return value: (transfer full): The new string. Has to be freed with g_free after usage.
  **/
-gchar*
+gchar *
 thunar_g_strescape (const gchar *source)
 {
-  gchar*       g_escaped;
-  gchar*       result;
+  gchar       *g_escaped;
+  gchar       *result;
   unsigned int j = 0;
   unsigned int new_size = 0;
 
@@ -168,4 +172,139 @@ thunar_g_strescape (const gchar *source)
   result[j] = '\0';
   g_free (g_escaped);
   return result;
+}
+
+
+
+/**
+ * thunar_g_utf8_normalize_for_search
+ * @str               : The string to normalize, zero-terminated.
+ * @strip_diacritics  : Remove diacritics, leaving only base characters.
+ * @casefold          : Fold case, to ignore letter case distinctions.
+ *
+ * Canonicalize a UTF-8 string into a form suitable for substring
+ * matching against other strings passed through this function with the
+ * same options. The strings produced by this function cannot be
+ * transformed back into the original string. They can however be
+ * matched against each other with functions like g_strrstr() that
+ * aren't Unicode-aware.
+ *
+ * The implementation is currently not locale-aware, and relies only on
+ * what GLib can do. It may change, so these strings should not be
+ * persisted to disk and reused later.
+ *
+ * Do not use these strings for sorting. Use g_utf8_collate_key()
+ * instead.
+ *
+ * Like g_utf8_normalize(), this returns NULL if the string is not valid
+ * UTF-8.
+ *
+ * Return value: (transfer full): The normalized string, or NULL. Free non-NULL values with g_free() after use.
+ **/
+
+gchar *
+thunar_g_utf8_normalize_for_search (const gchar *str,
+                                    gboolean     strip_diacritics,
+                                    gboolean     casefold)
+{
+  gchar *normalized;
+  gchar *folded;
+
+  /* g_utf8_normalize() and g_utf8_next_char() both require valid UTF-8 */
+  if (g_utf8_validate (str, -1, NULL) == FALSE)
+    return NULL;
+
+  /* Optionally remove combining characters as a crude way of doing diacritic stripping */
+  if (strip_diacritics == TRUE)
+    {
+      /* decompose composed characters to <base-char + combining-marks> */
+      gchar *tmp = g_utf8_normalize (str, -1, G_NORMALIZE_DEFAULT);
+
+      /* Discard the combining characters/marks/accents */
+      /* GStrings keep track of where their ends are, so it's efficient */
+      GString *stripped = g_string_sized_new (strlen (tmp));
+      gunichar c;
+      for (gchar *i = tmp; *i != '\0'; i = g_utf8_next_char (i))
+        {
+          c = g_utf8_get_char (i);
+          if (G_LIKELY (g_unichar_combining_class (c) == 0))
+            g_string_append_unichar (stripped, c);
+          /* We can limit it by Unicode block here if this turns out to be
+           * too aggressive and makes searches work badly for particular
+           * scripts */
+        }
+      g_free (tmp);
+
+      tmp = g_string_free (stripped, FALSE); /* transfers buffer ownership */
+      normalized = g_utf8_normalize (tmp, -1, G_NORMALIZE_ALL_COMPOSE);
+      g_free (tmp);
+    }
+  else /* strip_diacritics == FALSE */
+    {
+      normalized = g_utf8_normalize (str, -1, G_NORMALIZE_ALL_COMPOSE);
+    }
+
+  /* String representation is now normalized the way we want it:
+   *
+   * 1. Combining chars have been stripped off if requested.
+   *
+   * 2. Compatibility chars like SUPERSCRIPT THREE are collapsed to
+   *    their standard representations (DIGIT THREE, in this case).
+   *
+   * 3. If any combining chars are left, they are now composed back onto
+   *    their base char. Otherwise a single LATIN LETTER A in a pattern
+   *    wpould match LATIN LETTER A followed by COMBINING GRAVE ACCENT.
+   */
+
+  /* permit case-insensitive matching, if required */
+  if (casefold == FALSE)
+    return normalized;
+
+  /* remove case distinctions (not locale aware) */
+  folded = g_utf8_casefold (normalized, strlen (normalized));
+  g_free (normalized);
+  return folded;
+}
+
+
+
+/**
+ * thunar_g_app_info_equal
+ * @appinfo1  : The first g_app_info object
+ * @appinfo2  : The second g_app_info object
+ *
+ * For unknown reason "g_app_info_equal" does weird stuff / crashes thunar in some cases.
+ * (select two files of the same type + Sent to --> mail recipient )
+ * So we use this trivial method to compare applications for now.
+ *
+ * Return value: : TRUE if appinfo1 is equal to appinfo2. FALSE otherwise.
+ **/
+gboolean
+thunar_g_app_info_equal (gpointer appinfo1,
+                         gpointer appinfo2)
+{
+  return g_utf8_collate (g_app_info_get_name (appinfo1),
+                         g_app_info_get_name (appinfo2))
+         == 0;
+}
+
+/**
+ * thunar_g_object_set_guint_data
+ * @object  : The #GObject to set
+ * @key     : key for which the data should be set
+ * @data    : guint value to set as data
+ *
+ * Since it is not possible to set a plain uint to a G_OBJECT, we need to use a pointer
+ * This helper method encapsulates the process of doing so
+ **/
+void
+thunar_g_object_set_guint_data (GObject     *object,
+                                const gchar *key,
+                                guint        data)
+{
+  guint *data_ptr;
+
+  data_ptr = g_malloc (sizeof (gint));
+  *data_ptr = data;
+  g_object_set_data_full (object, key, data_ptr, g_free);
 }

@@ -20,21 +20,25 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <gdk/gdkkeysyms.h>
+#include "thunar/thunar-browser.h"
+#include "thunar/thunar-dialogs.h"
+#include "thunar/thunar-folder.h"
+#include "thunar/thunar-gobject-extensions.h"
+#include "thunar/thunar-gtk-extensions.h"
+#include "thunar/thunar-icon-factory.h"
+#include "thunar/thunar-location-entry.h"
+#include "thunar/thunar-marshal.h"
+#include "thunar/thunar-path-entry.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-shortcuts-model.h"
+#include "thunar/thunar-util.h"
+#include "thunar/thunar-window.h"
 
-#include <thunar/thunar-browser.h>
-#include <thunar/thunar-dialogs.h>
-#include <thunar/thunar-gobject-extensions.h>
-#include <thunar/thunar-gtk-extensions.h>
-#include <thunar/thunar-icon-factory.h>
-#include <thunar/thunar-location-entry.h>
-#include <thunar/thunar-marshal.h>
-#include <thunar/thunar-path-entry.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-shortcuts-model.h>
+#include <gdk/gdkkeysyms.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -47,30 +51,36 @@ enum
 
 
 
-static void        thunar_location_entry_navigator_init           (ThunarNavigatorIface     *iface);
-static void        thunar_location_entry_finalize                 (GObject                  *object);
-static void        thunar_location_entry_get_property             (GObject                  *object,
-                                                                   guint                     prop_id,
-                                                                   GValue                   *value,
-                                                                   GParamSpec               *pspec);
-static void        thunar_location_entry_set_property             (GObject                  *object,
-                                                                   guint                     prop_id,
-                                                                   const GValue             *value,
-                                                                   GParamSpec               *pspec);
-static ThunarFile *thunar_location_entry_get_current_directory    (ThunarNavigator          *navigator);
-static void        thunar_location_entry_set_current_directory    (ThunarNavigator          *navigator,
-                                                                   ThunarFile               *current_directory);
-static void        thunar_location_entry_activate                 (GtkWidget                *path_entry,
-                                                                   ThunarLocationEntry      *location_entry);
-static gboolean    thunar_location_entry_button_press_event       (GtkWidget                *path_entry,
-                                                                   GdkEventButton           *event,
-                                                                   ThunarLocationEntry      *location_entry);
-static gboolean    thunar_location_entry_reset                    (ThunarLocationEntry      *location_entry);
-static void        thunar_location_entry_reload                   (GtkEntry                 *entry,
-                                                                   GtkEntryIconPosition      icon_pos,
-                                                                   GdkEvent                 *event,
-                                                                   ThunarLocationEntry      *location_entry);
-static void        thunar_location_entry_emit_edit_done           (ThunarLocationEntry      *entry);
+static void
+thunar_location_entry_navigator_init (ThunarNavigatorIface *iface);
+static void
+thunar_location_entry_finalize (GObject *object);
+static void
+thunar_location_entry_get_property (GObject    *object,
+                                    guint       prop_id,
+                                    GValue     *value,
+                                    GParamSpec *pspec);
+static void
+thunar_location_entry_set_property (GObject      *object,
+                                    guint         prop_id,
+                                    const GValue *value,
+                                    GParamSpec   *pspec);
+static ThunarFile *
+thunar_location_entry_get_current_directory (ThunarNavigator *navigator);
+static void
+thunar_location_entry_set_current_directory (ThunarNavigator *navigator,
+                                             ThunarFile      *current_directory);
+static void
+thunar_location_entry_activate (GtkWidget           *path_entry,
+                                ThunarLocationEntry *location_entry);
+static gboolean
+thunar_location_entry_button_press_event (GtkWidget           *path_entry,
+                                          GdkEventButton      *event,
+                                          ThunarLocationEntry *location_entry);
+static gboolean
+thunar_location_entry_reset (ThunarLocationEntry *location_entry);
+static void
+thunar_location_entry_emit_edit_done (ThunarLocationEntry *entry);
 
 
 
@@ -82,7 +92,6 @@ struct _ThunarLocationEntryClass
   gboolean (*reset) (ThunarLocationEntry *location_entry);
 
   /* externally visible signals */
-  void (*reload_requested) (void);
   void (*edit_done) (void);
 };
 
@@ -90,10 +99,10 @@ struct _ThunarLocationEntry
 {
   GtkHBox __parent__;
 
-  ThunarFile   *current_directory;
-  GtkWidget    *path_entry;
+  ThunarFile *current_directory;
+  GtkWidget  *path_entry;
 
-  gboolean      right_click_occurred;
+  gboolean right_click_occurred;
 };
 
 
@@ -128,7 +137,7 @@ thunar_location_entry_class_init (ThunarLocationEntryClass *klass)
    * reset the @location_entry contents to the current directory.
    * This is an internal signal used to bind the action to keys.
    **/
-  g_signal_new (I_("reset"),
+  g_signal_new (I_ ("reset"),
                 G_TYPE_FROM_CLASS (klass),
                 G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
                 G_STRUCT_OFFSET (ThunarLocationEntryClass, reset),
@@ -136,19 +145,7 @@ thunar_location_entry_class_init (ThunarLocationEntryClass *klass)
                 _thunar_marshal_BOOLEAN__VOID,
                 G_TYPE_BOOLEAN, 0);
 
-  /**
-   * ThunarLocationEntry::reload-requested:
-   * @location_entry : a #ThunarLocationEntry.
-   *
-   * Emitted by @location_entry whenever the user clicked a "reload" button
-   **/
-  g_signal_new ("reload-requested",
-                G_TYPE_FROM_CLASS (klass),
-                G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
-                G_STRUCT_OFFSET (ThunarLocationEntryClass, reload_requested),
-                NULL, NULL,
-                NULL,
-                G_TYPE_NONE, 0);
+
 
   /**
    * ThunarLocationEntry::edit-done:
@@ -188,21 +185,12 @@ thunar_location_entry_init (ThunarLocationEntry *location_entry)
   gtk_orientable_set_orientation (GTK_ORIENTABLE (location_entry), GTK_ORIENTATION_HORIZONTAL);
 
   location_entry->path_entry = thunar_path_entry_new ();
-  exo_binding_new (G_OBJECT (location_entry), "current-directory", G_OBJECT (location_entry->path_entry), "current-file");
+  g_object_bind_property (G_OBJECT (location_entry), "current-directory",
+                          G_OBJECT (location_entry->path_entry), "current-file",
+                          G_BINDING_SYNC_CREATE);
   g_signal_connect_after (G_OBJECT (location_entry->path_entry), "activate", G_CALLBACK (thunar_location_entry_activate), location_entry);
   gtk_box_pack_start (GTK_BOX (location_entry), location_entry->path_entry, TRUE, TRUE, 0);
   gtk_widget_show (location_entry->path_entry);
-
-  /* put reload button in entry */
-  gtk_entry_set_icon_from_icon_name (GTK_ENTRY (location_entry->path_entry),
-                                     GTK_ENTRY_ICON_SECONDARY, "view-refresh-symbolic");
-  gtk_entry_set_icon_tooltip_text (GTK_ENTRY (location_entry->path_entry),
-                                   GTK_ENTRY_ICON_SECONDARY, _("Reload the current folder"));
-  g_signal_connect (G_OBJECT (location_entry->path_entry), "icon-release",
-                    G_CALLBACK (thunar_location_entry_reload), location_entry);
-
-  /* make sure the edit-done signal is emitted upon moving the focus somewhere else */
-  g_signal_connect_swapped (location_entry->path_entry, "focus-out-event", G_CALLBACK (thunar_location_entry_emit_edit_done), location_entry);
 
   /* ...except if it is grabbed by the context menu */
   location_entry->right_click_occurred = FALSE;
@@ -267,7 +255,7 @@ thunar_location_entry_set_property (GObject      *object,
 
 
 
-static ThunarFile*
+static ThunarFile *
 thunar_location_entry_get_current_directory (ThunarNavigator *navigator)
 {
   return THUNAR_LOCATION_ENTRY (navigator)->current_directory;
@@ -367,6 +355,11 @@ thunar_location_entry_open_or_launch (ThunarLocationEntry *location_entry,
                                  thunar_file_get_display_name (file));
       g_error_free (error);
     }
+  else
+    {
+      /* add opened file to `recent:///` */
+      thunar_file_add_to_recent (file);
+    }
 }
 
 
@@ -454,18 +447,16 @@ thunar_location_entry_reset (ThunarLocationEntry *location_entry)
 
 
 
-static void
-thunar_location_entry_reload (GtkEntry            *entry,
-                              GtkEntryIconPosition icon_pos,
-                              GdkEvent            *event,
-                              ThunarLocationEntry *location_entry)
+/**
+ * thunar_location_entry_enable_edit_done_once:
+ * @entry: The #ThunarLocationEntry
+ *
+ * Request to emit the 'edit done' once, whenever the focus on the widget got lost
+ */
+void
+thunar_location_entry_enable_edit_done_once (ThunarLocationEntry *location_entry)
 {
-  _thunar_return_if_fail (THUNAR_IS_LOCATION_ENTRY (location_entry));
-
-  if (icon_pos == GTK_ENTRY_ICON_SECONDARY)
-    {
-      g_signal_emit_by_name (location_entry, "reload-requested");
-    }
+  g_signal_connect_swapped (location_entry->path_entry, "focus-out-event", G_CALLBACK (thunar_location_entry_emit_edit_done), location_entry);
 }
 
 
@@ -473,9 +464,15 @@ thunar_location_entry_reload (GtkEntry            *entry,
 static void
 thunar_location_entry_emit_edit_done (ThunarLocationEntry *entry)
 {
-  /* do not emit signal if the context menu was opened */
-  if (entry->right_click_occurred == FALSE)
+  GtkWidget *window = gtk_widget_get_toplevel (GTK_WIDGET (entry));
+
+  /**
+   * - do not emit the signal if the context menu was opened
+   * - only emit the signal if we are the toplevel window (no reset on a window backdrop)
+   */
+  if (entry->right_click_occurred == FALSE && GTK_IS_WINDOW (window) && gtk_window_has_toplevel_focus (GTK_WINDOW (window)) == TRUE)
     {
+      g_signal_handlers_disconnect_by_func (entry->path_entry, G_CALLBACK (thunar_location_entry_emit_edit_done), entry);
       g_signal_emit_by_name (entry, "edit-done");
     }
 
@@ -483,3 +480,36 @@ thunar_location_entry_emit_edit_done (ThunarLocationEntry *entry)
 }
 
 
+
+/**
+ * thunar_location_entry_cancel_search
+ * @entry          : The #ThunarLocationEntry
+ *
+ * Cancels the search for the location entry and its path entry.
+ */
+void
+thunar_location_entry_cancel_search (ThunarLocationEntry *entry)
+{
+  entry->right_click_occurred = FALSE;
+  thunar_location_entry_emit_edit_done (entry);
+
+  thunar_path_entry_cancel_search (THUNAR_PATH_ENTRY (entry->path_entry));
+  thunar_path_entry_set_current_file (THUNAR_PATH_ENTRY (entry->path_entry), entry->current_directory);
+}
+
+
+
+/**
+ * thunar_location_entry_get_search_query:
+ * @entry        : a #ThunarLocationEntry.
+ *
+ * Returns a copy of the search query in the text field of the path_entry of @entry "" if the path_entry doesn't contain
+ * a search query.
+ *
+ * It's the responsibility of the caller to free the returned string using `g_free`.
+ **/
+gchar *
+thunar_location_entry_get_search_query (ThunarLocationEntry *entry)
+{
+  return thunar_path_entry_get_search_query (THUNAR_PATH_ENTRY (entry->path_entry));
+}

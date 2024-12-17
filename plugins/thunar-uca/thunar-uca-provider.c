@@ -24,10 +24,8 @@
 #endif
 
 #include <gio/gio.h>
-
-#include <libxfce4util/libxfce4util.h>
 #include <libxfce4ui/libxfce4ui.h>
-
+#include <libxfce4util/libxfce4util.h>
 #include <thunar-uca/thunar-uca-chooser.h>
 #include <thunar-uca/thunar-uca-context.h>
 #include <thunar-uca/thunar-uca-model.h>
@@ -36,23 +34,32 @@
 
 
 
-static void   thunar_uca_provider_menu_provider_init        (ThunarxMenuProviderIface         *iface);
-static void   thunar_uca_provider_preferences_provider_init (ThunarxPreferencesProviderIface  *iface);
-static void   thunar_uca_provider_finalize                  (GObject                          *object);
-static GList *thunar_uca_provider_get_menu_items            (ThunarxPreferencesProvider       *preferences_provider,
-                                                             GtkWidget                        *window);
-static GList *thunar_uca_provider_get_file_menu_items       (ThunarxMenuProvider              *menu_provider,
-                                                             GtkWidget                        *window,
-                                                             GList                            *files);
-static GList *thunar_uca_provider_get_folder_menu_items     (ThunarxMenuProvider              *menu_provider,
-                                                             GtkWidget                        *window,
-                                                             ThunarxFileInfo                  *folder);
-static void   thunar_uca_provider_activated                 (ThunarUcaProvider                *uca_provider,
-                                                             ThunarxMenuItem                  *item);
-static void   thunar_uca_provider_child_watch               (ThunarUcaProvider                *uca_provider,
-                                                             gint                              exit_status);
-static void   thunar_uca_provider_child_watch_destroy       (gpointer                          user_data,
-                                                             GClosure                         *closure);
+static void
+thunar_uca_provider_menu_provider_init (ThunarxMenuProviderIface *iface);
+static void
+thunar_uca_provider_preferences_provider_init (ThunarxPreferencesProviderIface *iface);
+static void
+thunar_uca_provider_finalize (GObject *object);
+static GList *
+thunar_uca_provider_get_menu_items (ThunarxPreferencesProvider *preferences_provider,
+                                    GtkWidget                  *window);
+static GList *
+thunar_uca_provider_get_file_menu_items (ThunarxMenuProvider *menu_provider,
+                                         GtkWidget           *window,
+                                         GList               *files);
+static GList *
+thunar_uca_provider_get_folder_menu_items (ThunarxMenuProvider *menu_provider,
+                                           GtkWidget           *window,
+                                           ThunarxFileInfo     *folder);
+static void
+thunar_uca_provider_activated (ThunarUcaProvider *uca_provider,
+                               ThunarxMenuItem   *item);
+static void
+thunar_uca_provider_child_watch (ThunarUcaProvider *uca_provider,
+                                 gint               exit_status);
+static void
+thunar_uca_provider_child_watch_destroy (gpointer  user_data,
+                                         GClosure *closure);
 
 
 
@@ -72,8 +79,8 @@ struct _ThunarUcaProvider
    * to be able to refresh the folder contents after the
    * child process has terminated.
    */
-  gchar          *child_watch_path;
-  GClosure       *child_watch;
+  gchar    *child_watch_path;
+  GClosure *child_watch;
 };
 
 
@@ -171,15 +178,14 @@ manage_menu_items (GtkWindow *window)
 
 
 
-static GList*
+static GList *
 thunar_uca_provider_get_menu_items (ThunarxPreferencesProvider *preferences_provider,
                                     GtkWidget                  *window)
 {
   ThunarxMenuItem *item;
   GClosure        *closure;
 
-  item = thunarx_menu_item_new ("ThunarUca::manage-actions", _("Configure c_ustom actions..."),
-                                _("Setup custom actions that will appear in the file managers context menus"), NULL);
+  item = thunarx_menu_item_new ("ThunarUca::manage-actions", _("Confi_gure custom actions..."), _("Setup custom actions that will appear in the file managers context menus"), NULL);
   closure = g_cclosure_new_object_swap (G_CALLBACK (manage_menu_items), G_OBJECT (window));
   g_signal_connect_closure (G_OBJECT (item), "activate", closure, TRUE);
 
@@ -187,8 +193,53 @@ thunar_uca_provider_get_menu_items (ThunarxPreferencesProvider *preferences_prov
 }
 
 
+/* returned menu must be freed with g_object_unref() */
+static ThunarxMenu *
+find_submenu_by_name (gchar *name, GList *items)
+{
+  GList *lp;
+  GList *thunarx_menu_items;
 
-static GList*
+  for (lp = g_list_first (items); lp != NULL; lp = lp->next)
+    {
+      gchar       *item_name = NULL;
+      ThunarxMenu *item_menu = NULL;
+      g_object_get (G_OBJECT (lp->data), "name", &item_name, "menu", &item_menu, NULL);
+
+      if (item_menu != NULL)
+        {
+          /* This menu is the correct menu */
+          if (g_strcmp0 (item_name, name) == 0)
+            {
+              g_free (item_name);
+              return item_menu;
+            }
+
+          /* Some other menu found .. lets check recursively if the menu we search for is inside */
+          thunarx_menu_items = thunarx_menu_get_items (item_menu);
+          g_object_unref (item_menu);
+
+          if (thunarx_menu_items != NULL)
+            {
+              ThunarxMenu *submenu = find_submenu_by_name (name, thunarx_menu_items);
+              if (submenu != NULL)
+                {
+                  g_free (item_name);
+                  return submenu;
+                }
+              thunarx_menu_item_list_free (thunarx_menu_items);
+            }
+        }
+      g_free (item_name);
+    }
+
+  /* not found */
+  return NULL;
+}
+
+
+
+static GList *
 thunar_uca_provider_get_file_menu_items (ThunarxMenuProvider *menu_provider,
                                          GtkWidget           *window,
                                          GList               *files)
@@ -197,20 +248,26 @@ thunar_uca_provider_get_file_menu_items (ThunarxMenuProvider *menu_provider,
   ThunarUcaProvider   *uca_provider = THUNAR_UCA_PROVIDER (menu_provider);
   ThunarUcaContext    *uca_context = NULL;
   GtkTreeIter          iter;
+  ThunarxMenuItem     *menu_item;
   ThunarxMenuItem     *item;
   GList               *items = NULL;
   GList               *paths;
   GList               *lp;
+  ThunarxMenu         *submenu;
+  ThunarxMenu         *parent_menu = NULL;
 
   paths = thunar_uca_model_match (uca_provider->model, files);
+
   for (lp = g_list_last (paths); lp != NULL; lp = lp->prev)
     {
-      gchar *unique_id = NULL;
-      gchar *name = NULL;
-      gchar *label = NULL;
-      gchar *tooltip = NULL;
-      gchar *icon_name = NULL;
-      GIcon *gicon = NULL;
+      gchar  *unique_id = NULL;
+      gchar  *name = NULL;
+      gchar  *sub_menu_string = NULL;
+      gchar **sub_menus_as_array = NULL;
+      gchar  *label = NULL;
+      gchar  *tooltip = NULL;
+      gchar  *icon_name = NULL;
+      GIcon  *gicon = NULL;
 
       /* try to lookup the tree iter for the specified tree path */
       if (gtk_tree_model_get_iter (GTK_TREE_MODEL (uca_provider->model), &iter, lp->data))
@@ -218,6 +275,7 @@ thunar_uca_provider_get_file_menu_items (ThunarxMenuProvider *menu_provider,
           /* determine the label, tooltip and stock-id for the item */
           gtk_tree_model_get (GTK_TREE_MODEL (uca_provider->model), &iter,
                               THUNAR_UCA_MODEL_COLUMN_NAME, &label,
+                              THUNAR_UCA_MODEL_COLUMN_SUB_MENU, &sub_menu_string,
                               THUNAR_UCA_MODEL_COLUMN_GICON, &gicon,
                               THUNAR_UCA_MODEL_COLUMN_DESCRIPTION, &tooltip,
                               THUNAR_UCA_MODEL_COLUMN_UNIQUE_ID, &unique_id,
@@ -228,6 +286,47 @@ thunar_uca_provider_get_file_menu_items (ThunarxMenuProvider *menu_provider,
 
           if (gicon != NULL)
             icon_name = g_icon_to_string (gicon);
+
+          /* Search or build the parent submenus, if required */
+          parent_menu = NULL;
+          sub_menus_as_array = g_strsplit (sub_menu_string, "/", -1);
+
+          for (int i = 0; sub_menus_as_array[i] != NULL; i++)
+            {
+              /* get the submenu path up to the iterator  */
+              gchar *sub_menu_path = g_strdup (sub_menus_as_array[0]);
+
+              for (int j = 1; j <= i; j++)
+                sub_menu_path = g_strconcat (sub_menu_path, "/", sub_menus_as_array[j], NULL);
+
+              /* Check if the full path already exists */
+              submenu = find_submenu_by_name (sub_menu_path, items);
+
+              if (submenu != NULL)
+                {
+                  /* This submenu already exists, we can just use it as new parent */
+                  parent_menu = submenu;
+                  /* no need to keep the extra reference on it */
+                  g_object_unref (submenu);
+                }
+              else
+                {
+                  /* Not found, we create a new submenu */
+                  menu_item = thunarx_menu_item_new (sub_menu_path, sub_menus_as_array[i], "", "folder");
+
+                  /* Only add base-submenus to the returned list */
+                  if (parent_menu == NULL)
+                    items = g_list_prepend (items, menu_item);
+                  else
+                    thunarx_menu_prepend_item (parent_menu, menu_item);
+
+                  /* This sublevel becomes the new parent */
+                  parent_menu = thunarx_menu_new ();
+                  thunarx_menu_item_set_menu (menu_item, parent_menu);
+                }
+              g_free (sub_menu_path);
+            }
+          g_strfreev (sub_menus_as_array);
 
           /* create the new menu item with the given parameters */
           item = thunarx_menu_item_new (name, label, tooltip, icon_name);
@@ -247,20 +346,24 @@ thunar_uca_provider_get_file_menu_items (ThunarxMenuProvider *menu_provider,
           /* connect the "activate" signal */
           g_signal_connect_data (G_OBJECT (item), "activate", G_CALLBACK (thunar_uca_provider_activated),
                                  g_object_ref (G_OBJECT (uca_provider)),
-                                 (GClosureNotify) (void (*)(void)) g_object_unref,
+                                 (GClosureNotify) (void (*) (void)) g_object_unref,
                                  G_CONNECT_SWAPPED);
 
           /* set the action path */
-          g_object_set_data (G_OBJECT (item), "action_path",
-                             g_strconcat ("<Actions>/ThunarActions/", name, NULL));
+          g_object_set_data_full (G_OBJECT (item), "action_path",
+                                  g_strconcat ("<Actions>/ThunarActions/", name, NULL), g_free);
 
-          /* add the menu item to the return list */
-          items = g_list_prepend (items, item);
+          /* add only base menu items to the return list */
+          if (parent_menu == NULL)
+            items = g_list_prepend (items, item);
+          else
+            thunarx_menu_prepend_item (parent_menu, item);
 
           /* cleanup */
           g_free (tooltip);
           g_free (label);
           g_free (name);
+          g_free (sub_menu_string);
           g_free (icon_name);
           g_free (unique_id);
 
@@ -278,7 +381,7 @@ thunar_uca_provider_get_file_menu_items (ThunarxMenuProvider *menu_provider,
 
 
 
-static GList*
+static GList *
 thunar_uca_provider_get_folder_menu_items (ThunarxMenuProvider *menu_provider,
                                            GtkWidget           *window,
                                            ThunarxFileInfo     *folder)
@@ -429,6 +532,7 @@ thunar_uca_provider_activated (ThunarUcaProvider *uca_provider,
                                        GTK_MESSAGE_ERROR,
                                        GTK_BUTTONS_CLOSE,
                                        _("Failed to launch action \"%s\"."), label);
+      gtk_window_set_title (GTK_WINDOW (dialog), _("Error"));
       gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog), "%s.", error->message);
       gtk_dialog_run (GTK_DIALOG (dialog));
       gtk_widget_destroy (dialog);

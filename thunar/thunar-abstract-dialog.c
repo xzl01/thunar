@@ -18,16 +18,17 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
+
+#include "thunar/thunar-abstract-dialog.h"
 
 #include <gdk/gdkkeysyms.h>
 
-#include <thunar/thunar-abstract-dialog.h>
 
 
-
-static void thunar_abstract_dialog_close      (GtkDialog                 *dialog);
+static void
+thunar_abstract_dialog_close (GtkDialog *dialog);
 
 
 
@@ -75,4 +76,3 @@ thunar_abstract_dialog_close (GtkDialog *dialog)
       gdk_event_free (event);
     }
 }
-

@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_SYS_TYPES_H
@@ -46,12 +46,12 @@
 #include <unistd.h>
 #endif
 
-#include <glib-object.h>
+#include "thunar/thunar-user.h"
+#include "thunar/thunar-util.h"
 
 #include <exo/exo.h>
-
-#include <thunar/thunar-user.h>
-#include <thunar/thunar-util.h>
+#include <glib-object.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -60,9 +60,10 @@
 
 
 
-
-static void         thunar_group_finalize   (GObject          *object);
-static ThunarGroup *thunar_group_new        (guint32           id);
+static void
+thunar_group_finalize (GObject *object);
+static ThunarGroup *
+thunar_group_new (guint32 id);
 
 
 
@@ -116,7 +117,7 @@ thunar_group_finalize (GObject *object)
 
 
 
-static ThunarGroup*
+static ThunarGroup *
 thunar_group_new (guint32 id)
 {
   ThunarGroup *group;
@@ -156,7 +157,7 @@ thunar_group_get_id (ThunarGroup *group)
  *
  * Return value: the name of @group.
  **/
-const gchar*
+const gchar *
 thunar_group_get_name (ThunarGroup *group)
 {
   struct group *grp;
@@ -178,10 +179,14 @@ thunar_group_get_name (ThunarGroup *group)
 
 
 
-static void        thunar_user_finalize          (GObject         *object);
-static void        thunar_user_load              (ThunarUser      *user);
-static ThunarUser *thunar_user_new               (guint32          id);
-static ThunarGroup*thunar_user_get_primary_group (ThunarUser      *user);
+static void
+thunar_user_finalize (GObject *object);
+static void
+thunar_user_load (ThunarUser *user);
+static ThunarUser *
+thunar_user_new (guint32 id);
+static ThunarGroup *
+thunar_user_get_primary_group (ThunarUser *user);
 
 
 struct _ThunarUserClass
@@ -217,7 +222,7 @@ thunar_user_class_init (ThunarUserClass *klass)
 
   /* determine the current process' effective user id, we do
    * this only once to avoid the syscall overhead on every
-   * is_me() invokation.
+   * is_me() invocation.
    */
   thunar_user_effective_uid = geteuid ();
 
@@ -290,7 +295,7 @@ thunar_user_load (ThunarUser *user)
           name[0] = g_ascii_toupper (name[0]);
 
           /* replace all occurances of '&' */
-          t = exo_str_replace (user->real_name, "&", name);
+          t = xfce_str_replace (user->real_name, "&", name);
           g_free (user->real_name);
           user->real_name = t;
 
@@ -308,7 +313,7 @@ thunar_user_load (ThunarUser *user)
 
 
 
-static ThunarUser*
+static ThunarUser *
 thunar_user_new (guint32 id)
 {
   ThunarUser *user;
@@ -320,7 +325,7 @@ thunar_user_new (guint32 id)
 }
 
 
-static ThunarGroup*
+static ThunarGroup *
 thunar_user_get_primary_group (ThunarUser *user)
 {
   g_return_val_if_fail (THUNAR_IS_USER (user), NULL);
@@ -348,7 +353,7 @@ thunar_user_get_primary_group (ThunarUser *user)
  *
  * Return value: the groups that @user belongs to.
  **/
-GList*
+GList *
 thunar_user_get_groups (ThunarUser *user)
 {
   ThunarUserManager *manager;
@@ -409,7 +414,7 @@ thunar_user_get_groups (ThunarUser *user)
  *
  * Return value: the name of @user.
  **/
-const gchar*
+const gchar *
 thunar_user_get_name (ThunarUser *user)
 {
   g_return_val_if_fail (THUNAR_IS_USER (user), 0);
@@ -433,7 +438,7 @@ thunar_user_get_name (ThunarUser *user)
  *
  * Return value: the real name for @user or %NULL.
  **/
-const gchar*
+const gchar *
 thunar_user_get_real_name (ThunarUser *user)
 {
   g_return_val_if_fail (THUNAR_IS_USER (user), 0);
@@ -466,10 +471,12 @@ thunar_user_is_me (ThunarUser *user)
 
 
 
-
-static void     thunar_user_manager_finalize            (GObject                *object);
-static gboolean thunar_user_manager_flush_timer         (gpointer                user_data);
-static void     thunar_user_manager_flush_timer_destroy (gpointer                user_data);
+static void
+thunar_user_manager_finalize (GObject *object);
+static gboolean
+thunar_user_manager_flush_timer (gpointer user_data);
+static void
+thunar_user_manager_flush_timer_destroy (gpointer user_data);
 
 
 
@@ -485,7 +492,7 @@ struct _ThunarUserManager
   GHashTable *groups;
   GHashTable *users;
 
-  guint       flush_timer_id;
+  guint flush_timer_id;
 };
 
 
@@ -559,16 +566,14 @@ thunar_user_manager_flush_timer (gpointer user_data)
   ThunarUserManager *manager = THUNAR_USER_MANAGER (user_data);
   guint              size = 0;
 
-THUNAR_THREADS_ENTER
-
   /* drop all cached groups */
   size += g_hash_table_foreach_remove (manager->groups,
-                                       (GHRFunc) (void (*)(void)) gtk_true,
+                                       (GHRFunc) (void (*) (void)) gtk_true,
                                        NULL);
 
   /* drop all cached users */
   size += g_hash_table_foreach_remove (manager->users,
-                                       (GHRFunc) (void (*)(void)) gtk_true,
+                                       (GHRFunc) (void (*) (void)) gtk_true,
                                        NULL);
 
   /* reload groups and passwd files if we had cached entities */
@@ -585,8 +590,6 @@ THUNAR_THREADS_ENTER
       setpassent (TRUE);
 #endif
     }
-
-THUNAR_THREADS_LEAVE
 
   return TRUE;
 }
@@ -610,7 +613,7 @@ thunar_user_manager_flush_timer_destroy (gpointer user_data)
  *
  * Return value: the default #ThunarUserManager instance.
  **/
-ThunarUserManager*
+ThunarUserManager *
 thunar_user_manager_get_default (void)
 {
   static ThunarUserManager *manager = NULL;
@@ -642,7 +645,7 @@ thunar_user_manager_get_default (void)
  *
  * Return value: the #ThunarGroup corresponding to @id or %NULL.
  **/
-ThunarGroup*
+ThunarGroup *
 thunar_user_manager_get_group_by_id (ThunarUserManager *manager,
                                      guint32            id)
 {
@@ -678,7 +681,7 @@ thunar_user_manager_get_group_by_id (ThunarUserManager *manager,
  *
  * Return value: the #ThunarUser corresponding to @id or %NULL.
  **/
-ThunarUser*
+ThunarUser *
 thunar_user_manager_get_user_by_id (ThunarUserManager *manager,
                                     guint32            id)
 {
@@ -716,7 +719,7 @@ thunar_user_manager_get_user_by_id (ThunarUserManager *manager,
  *
  * Return value: the list of all groups known to the @manager.
  **/
-GList*
+GList *
 thunar_user_manager_get_all_groups (ThunarUserManager *manager)
 {
   ThunarGroup  *group;

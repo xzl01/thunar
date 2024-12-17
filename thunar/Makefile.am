@@ -45,6 +45,8 @@ thunar_SOURCES =							\
 	thunar-abstract-dialog.h					\
 	thunar-abstract-icon-view.c					\
 	thunar-abstract-icon-view.h					\
+	thunar-action-manager.c						\
+	thunar-action-manager.h						\
 	thunar-application.c						\
 	thunar-application.h						\
 	thunar-browser.c						\
@@ -85,8 +87,6 @@ thunar_SOURCES =							\
 	thunar-enum-types.h						\
 	thunar-file.c							\
 	thunar-file.h							\
-	thunar-file-monitor.c						\
-	thunar-file-monitor.h						\
 	thunar-folder.c							\
 	thunar-folder.h							\
 	thunar-gdk-extensions.c						\
@@ -105,6 +105,8 @@ thunar_SOURCES =							\
 	thunar-icon-factory.h						\
 	thunar-icon-renderer.c						\
 	thunar-icon-renderer.h						\
+	thunar-text-renderer.c						\
+	thunar-text-renderer.h						\
 	thunar-icon-view.c						\
 	thunar-icon-view.h						\
 	thunar-image.c							\
@@ -117,8 +119,10 @@ thunar_SOURCES =							\
 	thunar-io-scan-directory.h					\
 	thunar-job.c							\
 	thunar-job.h							\
-	thunar-launcher.c						\
-	thunar-launcher.h						\
+	thunar-job-operation.c						\
+	thunar-job-operation.h						\
+	thunar-job-operation-history.c					\
+	thunar-job-operation-history.h					\
 	thunar-list-model.c						\
 	thunar-list-model.h						\
 	thunar-location-bar.c						\
@@ -180,8 +184,12 @@ thunar_SOURCES =							\
 	thunar-size-label.h						\
 	thunar-standard-view.c						\
 	thunar-standard-view.h						\
+	thunar-standard-view-model.c						\
+	thunar-standard-view-model.h						\
 	thunar-statusbar.c						\
 	thunar-statusbar.h						\
+	thunar-toolbar-editor.c						\
+    thunar-toolbar-editor.h						\
 	thunar-thumbnail-cache.c					\
 	thunar-thumbnail-cache.h					\
 	thunar-thumbnailer.c						\
@@ -194,6 +202,8 @@ thunar_SOURCES =							\
 	thunar-tree-pane.h						\
 	thunar-tree-view.c						\
 	thunar-tree-view.h						\
+	thunar-tree-view-model.c					\
+	thunar-tree-view-model.h					\
 	thunar-user.c							\
 	thunar-user.h							\
 	thunar-util.c							\
@@ -203,6 +213,12 @@ thunar_SOURCES =							\
 	thunar-window.c							\
 	thunar-window.h
 
+noinst_LIBRARIES = libthunar.a
+libthunar_a_SOURCES =
+libthunar_a_LIBADD = 							\
+	$(filter %.o, $(thunar_SOURCES:%.c=thunar-%.o))			\
+	$(wildcard $(top_builddir)/thunarx/.libs/*.o)
+
 thunar_CFLAGS =								\
 	$(EXO_CFLAGS)							\
 	$(GIO_CFLAGS)							\
@@ -211,6 +227,8 @@ thunar_CFLAGS =								\
 	$(LIBNOTIFY_CFLAGS)						\
 	$(LIBSM_CFLAGS)							\
 	$(LIBXFCE4UI_CFLAGS)						\
+	$(LIBXFCE4UTIL_CFLAGS)						\
+	$(LIBXFCE4KBD_PRIVATE_CFLAGS) \
 	$(XFCONF_CFLAGS)						\
 	$(PANGO_CFLAGS)							\
 	$(PLATFORM_CFLAGS)
@@ -229,6 +247,8 @@ thunar_LDADD =								\
 	$(LIBNOTIFY_LIBS)						\
 	$(LIBSM_LIBS)							\
 	$(LIBXFCE4UI_LIBS)						\
+	$(LIBXFCE4UTIL_LIBS)						\
+	$(LIBXFCE4KBD_PRIVATE_LIBS) \
 	$(XFCONF_LIBS)							\
 	$(PANGO_LIBS)
 
@@ -246,7 +266,8 @@ endif
 desktopdir = $(datadir)/applications
 desktop_in_files = thunar-settings.desktop.in
 desktop_DATA = $(desktop_in_files:.desktop.in=.desktop)
-@INTLTOOL_DESKTOP_RULE@
+%.desktop: %.desktop.in Makefile
+	$(AM_V_GEN)$(MSGFMT) --desktop --template $< -d $(top_srcdir)/po -o $@
 
 # install symlink to 'thunar'
 install-exec-hook:
@@ -257,7 +278,7 @@ uninstall-local:
 	-( cd $(DESTDIR)$(bindir) ; test -h Thunar && rm -f Thunar )
 
 clean-local:
-	rm -f *.core core core.* *.o
+	rm -f *.core core core.* *.o *.a
 
 DISTCLEANFILES =							\
 	thunar-settings.desktop
@@ -329,3 +350,5 @@ EXTRA_DIST =								\
 	thunar-settings							\
 	thunar.gresource.xml					\
 	$(desktop_in_files)
+
+dist-hook: libthunar.a

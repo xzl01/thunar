@@ -21,7 +21,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -31,32 +31,31 @@
 #include <string.h>
 #endif
 
-#include <gdk/gdkkeysyms.h>
+#include "thunar/thunar-abstract-dialog.h"
+#include "thunar/thunar-application.h"
+#include "thunar/thunar-chooser-button.h"
+#include "thunar/thunar-dialogs.h"
+#include "thunar/thunar-emblem-chooser.h"
+#include "thunar/thunar-gio-extensions.h"
+#include "thunar/thunar-gobject-extensions.h"
+#include "thunar/thunar-gtk-extensions.h"
+#include "thunar/thunar-icon-factory.h"
+#include "thunar/thunar-image.h"
+#include "thunar/thunar-io-jobs.h"
+#include "thunar/thunar-job.h"
+#include "thunar/thunar-marshal.h"
+#include "thunar/thunar-pango-extensions.h"
+#include "thunar/thunar-permissions-chooser.h"
+#include "thunar/thunar-preferences.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-properties-dialog.h"
+#include "thunar/thunar-size-label.h"
+#include "thunar/thunar-util.h"
 
 #include <exo/exo.h>
+#include <gdk/gdkkeysyms.h>
 #include <libxfce4ui/libxfce4ui.h>
-
-#include <thunar/thunar-abstract-dialog.h>
-#include <thunar/thunar-application.h>
-#include <thunar/thunar-chooser-button.h>
-#include <thunar/thunar-dialogs.h>
-#include <thunar/thunar-emblem-chooser.h>
-#include <thunar/thunar-gio-extensions.h>
-#include <thunar/thunar-gobject-extensions.h>
-#include <thunar/thunar-gtk-extensions.h>
-#include <thunar/thunar-icon-factory.h>
-#include <thunar/thunar-image.h>
-#include <thunar/thunar-io-jobs.h>
-#include <thunar/thunar-job.h>
-#include <thunar/thunar-marshal.h>
-#include <thunar/thunar-pango-extensions.h>
-#include <thunar/thunar-permissions-chooser.h>
-#include <thunar/thunar-preferences.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-properties-dialog.h>
-#include <thunar/thunar-size-label.h>
-#include <thunar/thunar-thumbnailer.h>
-#include <thunar/thunar-util.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -66,6 +65,7 @@ enum
   PROP_0,
   PROP_FILES,
   PROP_FILE_SIZE_BINARY,
+  PROP_SHOW_FILE_HIGHLIGHT_TAB,
 };
 
 /* Signal identifiers */
@@ -75,31 +75,73 @@ enum
   LAST_SIGNAL,
 };
 
+/* Notebook Pages */
+enum
+{
+  NOTEBOOK_PAGE_GENERAL,
+  NOTEBOOK_PAGE_EMBLEMS,
+  NOTEBOOK_PAGE_HIGHLIGHT,
+  NOTEBOOK_PAGE_PERMISSIONS
+};
 
 
-static void     thunar_properties_dialog_dispose              (GObject                     *object);
-static void     thunar_properties_dialog_finalize             (GObject                     *object);
-static void     thunar_properties_dialog_get_property         (GObject                     *object,
-                                                               guint                        prop_id,
-                                                               GValue                      *value,
-                                                               GParamSpec                  *pspec);
-static void     thunar_properties_dialog_set_property         (GObject                     *object,
-                                                               guint                        prop_id,
-                                                               const GValue                *value,
-                                                               GParamSpec                  *pspec);
-static void     thunar_properties_dialog_response             (GtkDialog                   *dialog,
-                                                               gint                         response);
-static gboolean thunar_properties_dialog_reload               (ThunarPropertiesDialog      *dialog);
-static void     thunar_properties_dialog_name_activate        (GtkWidget                   *entry,
-                                                               ThunarPropertiesDialog      *dialog);
-static gboolean thunar_properties_dialog_name_focus_out_event (GtkWidget                   *entry,
-                                                               GdkEventFocus               *event,
-                                                               ThunarPropertiesDialog      *dialog);
-static void     thunar_properties_dialog_icon_button_clicked  (GtkWidget                   *button,
-                                                               ThunarPropertiesDialog      *dialog);
-static void     thunar_properties_dialog_update               (ThunarPropertiesDialog      *dialog);
-static void     thunar_properties_dialog_update_providers     (ThunarPropertiesDialog      *dialog);
-static GList   *thunar_properties_dialog_get_files            (ThunarPropertiesDialog      *dialog);
+static void
+thunar_properties_dialog_constructed (GObject *object);
+static void
+thunar_properties_dialog_dispose (GObject *object);
+static void
+thunar_properties_dialog_finalize (GObject *object);
+static void
+thunar_properties_dialog_get_property (GObject    *object,
+                                       guint       prop_id,
+                                       GValue     *value,
+                                       GParamSpec *pspec);
+static void
+thunar_properties_dialog_set_property (GObject      *object,
+                                       guint         prop_id,
+                                       const GValue *value,
+                                       GParamSpec   *pspec);
+static void
+thunar_properties_dialog_response (GtkDialog *dialog,
+                                   gint       response);
+static gboolean
+thunar_properties_dialog_reload (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_name_activate (GtkWidget              *entry,
+                                        ThunarPropertiesDialog *dialog);
+static gboolean
+thunar_properties_dialog_name_focus_out_event (GtkWidget              *entry,
+                                               GdkEventFocus          *event,
+                                               ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_icon_button_clicked (GtkWidget              *button,
+                                              ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_update (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_update_providers (ThunarPropertiesDialog *dialog);
+static GList *
+thunar_properties_dialog_get_files (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_reset_highlight (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_apply_highlight (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_set_foreground (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_set_background (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_update_apply_button (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_colorize_example_box (ThunarPropertiesDialog *dialog,
+                                               const gchar            *background,
+                                               const gchar            *foreground);
+static void
+thunar_properties_dialog_color_editor_changed (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_color_editor_close (ThunarPropertiesDialog *dialog);
+static void
+thunar_properties_dialog_notebook_page_changed (ThunarPropertiesDialog *dialog);
 
 
 struct _ThunarPropertiesDialogClass
@@ -112,41 +154,62 @@ struct _ThunarPropertiesDialogClass
 
 struct _ThunarPropertiesDialog
 {
-  ThunarAbstractDialog    __parent__;
+  ThunarAbstractDialog __parent__;
 
   ThunarxProviderFactory *provider_factory;
   GList                  *provider_pages;
 
-  ThunarPreferences      *preferences;
+  ThunarPreferences *preferences;
 
-  GList                  *files;
-  gboolean                file_size_binary;
+  GList   *files;
+  gboolean file_size_binary;
+  gboolean show_file_highlight_tab;
 
-  ThunarThumbnailer      *thumbnailer;
-  guint                   thumbnail_request;
+  XfceFilenameInput *name_entry;
 
-  XfceFilenameInput      *name_entry;
+  GtkWidget *notebook;
+  GtkWidget *icon_button;
+  GtkWidget *icon_image;
+  GtkWidget *names_label;
+  GtkWidget *single_box;
+  GtkWidget *kind_ebox;
+  GtkWidget *kind_label;
+  GtkWidget *openwith_chooser;
+  GtkWidget *link_label;
+  GtkWidget *link_label_text;
+  GtkWidget *location_label;
+  GtkWidget *origin_label;
+  GtkWidget *created_label;
+  GtkWidget *deleted_label;
+  GtkWidget *modified_label;
+  GtkWidget *accessed_label;
+  GtkWidget *capacity_vbox;
+  GtkWidget *capacity_label;
+  GtkWidget *freespace_vbox;
+  GtkWidget *freespace_bar;
+  GtkWidget *freespace_label;
+  GtkWidget *volume_image;
+  GtkWidget *volume_label;
+  GtkWidget *permissions_chooser;
+  GtkWidget *content_label;
+  GtkWidget *content_value_label;
+  GtkWidget *color_chooser;
+  GtkWidget *example_box;
 
-  GtkWidget              *notebook;
-  GtkWidget              *icon_button;
-  GtkWidget              *icon_image;
-  GtkWidget              *names_label;
-  GtkWidget              *single_box;
-  GtkWidget              *kind_ebox;
-  GtkWidget              *kind_label;
-  GtkWidget              *openwith_chooser;
-  GtkWidget              *link_label;
-  GtkWidget              *location_label;
-  GtkWidget              *origin_label;
-  GtkWidget              *deleted_label;
-  GtkWidget              *modified_label;
-  GtkWidget              *accessed_label;
-  GtkWidget              *freespace_vbox;
-  GtkWidget              *freespace_bar;
-  GtkWidget              *freespace_label;
-  GtkWidget              *volume_image;
-  GtkWidget              *volume_label;
-  GtkWidget              *permissions_chooser;
+  /* (set_background, set_foreground, reset, apply)
+   * btns under highlights tab */
+  GtkWidget *highlight_buttons;
+  GtkWidget *highlighting_spinner;
+  gulong     highlight_change_job_finish_signal;
+
+  ThunarJob *highlight_change_job;
+  ThunarJob *rename_job;
+
+  GtkWidget *highlight_apply_button;
+  GtkWidget *editor_button;
+
+  gchar *foreground_color;
+  gchar *background_color;
 };
 
 
@@ -167,6 +230,7 @@ thunar_properties_dialog_class_init (ThunarPropertiesDialogClass *klass)
   gobject_class->finalize = thunar_properties_dialog_finalize;
   gobject_class->get_property = thunar_properties_dialog_get_property;
   gobject_class->set_property = thunar_properties_dialog_set_property;
+  gobject_class->constructed = thunar_properties_dialog_constructed;
 
   gtkdialog_class = GTK_DIALOG_CLASS (klass);
   gtkdialog_class->response = thunar_properties_dialog_response;
@@ -183,8 +247,8 @@ thunar_properties_dialog_class_init (ThunarPropertiesDialogClass *klass)
   g_object_class_install_property (gobject_class,
                                    PROP_FILES,
                                    g_param_spec_boxed ("files", "files", "files",
-                                                        THUNARX_TYPE_FILE_INFO_LIST,
-                                                        EXO_PARAM_READWRITE));
+                                                       THUNARX_TYPE_FILE_INFO_LIST,
+                                                       EXO_PARAM_READWRITE));
 
   /**
    * ThunarPropertiesDialog:file_size_binary:
@@ -200,6 +264,19 @@ thunar_properties_dialog_class_init (ThunarPropertiesDialogClass *klass)
                                                          EXO_PARAM_READWRITE));
 
   /**
+   * ThunarPropertiesDialog:show_file_highlight_tab:
+   *
+   * Whether the highlight tab should be shown
+   **/
+  g_object_class_install_property (gobject_class,
+                                   PROP_SHOW_FILE_HIGHLIGHT_TAB,
+                                   g_param_spec_boolean ("show-file-hightlight-tab",
+                                                         "ShowFileHighlightTab",
+                                                         NULL,
+                                                         TRUE,
+                                                         EXO_PARAM_READWRITE | G_PARAM_CONSTRUCT));
+
+  /**
    * ThunarPropertiesDialog::reload:
    * @dialog : a #ThunarPropertiesDialog.
    *
@@ -207,7 +284,7 @@ thunar_properties_dialog_class_init (ThunarPropertiesDialogClass *klass)
    * file properties. This is an internal signal used to bind
    * the action to keys.
    **/
-  g_signal_new (I_("reload"),
+  g_signal_new (I_ ("reload"),
                 G_TYPE_FROM_CLASS (klass),
                 G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
                 G_STRUCT_OFFSET (ThunarPropertiesDialogClass, reload),
@@ -226,6 +303,33 @@ thunar_properties_dialog_class_init (ThunarPropertiesDialogClass *klass)
 static void
 thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 {
+  /* acquire a reference on the preferences and monitor the
+     "misc-date-style" and "misc-file-size-binary" settings */
+  dialog->preferences = thunar_preferences_get ();
+  g_signal_connect_swapped (G_OBJECT (dialog->preferences), "notify::misc-date-style",
+                            G_CALLBACK (thunar_properties_dialog_reload), dialog);
+  g_object_bind_property (G_OBJECT (dialog->preferences), "misc-file-size-binary",
+                          G_OBJECT (dialog), "file-size-binary",
+                          G_BINDING_SYNC_CREATE);
+  g_signal_connect_swapped (G_OBJECT (dialog->preferences), "notify::misc-file-size-binary",
+                            G_CALLBACK (thunar_properties_dialog_reload), dialog);
+
+
+  dialog->provider_factory = thunarx_provider_factory_get_default ();
+
+
+  dialog->rename_job = NULL;
+  dialog->highlight_change_job = NULL;
+  dialog->highlight_change_job_finish_signal = 0;
+}
+
+
+
+static void
+thunar_properties_dialog_constructed (GObject *object)
+{
+  ThunarPropertiesDialog *dialog = THUNAR_PROPERTIES_DIALOG (object);
+
   GtkWidget *chooser;
   GtkWidget *grid;
   GtkWidget *label;
@@ -233,26 +337,15 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
   GtkWidget *spacer;
   guint      row = 0;
   GtkWidget *image;
+  GtkWidget *button;
+  GtkWidget *infobar;
+  GtkWidget *frame;
 
-  /* acquire a reference on the preferences and monitor the
-     "misc-date-style" and "misc-file-size-binary" settings */
-  dialog->preferences = thunar_preferences_get ();
-  g_signal_connect_swapped (G_OBJECT (dialog->preferences), "notify::misc-date-style",
-                            G_CALLBACK (thunar_properties_dialog_reload), dialog);
-  exo_binding_new (G_OBJECT (dialog->preferences), "misc-file-size-binary",
-                   G_OBJECT (dialog), "file-size-binary");
-  g_signal_connect_swapped (G_OBJECT (dialog->preferences), "notify::misc-file-size-binary",
-                            G_CALLBACK (thunar_properties_dialog_reload), dialog);
-
-  /* create a new thumbnailer */
-  dialog->thumbnailer = thunar_thumbnailer_get ();
-  dialog->thumbnail_request = 0;
-
-  dialog->provider_factory = thunarx_provider_factory_get_default ();
+  G_OBJECT_CLASS (thunar_properties_dialog_parent_class)->constructed (object);
 
   gtk_dialog_add_buttons (GTK_DIALOG (dialog),
                           _("_Help"), GTK_RESPONSE_HELP,
-                          _("_Close"), GTK_RESPONSE_CLOSE,
+                            _("_Close"), GTK_RESPONSE_CLOSE,
                           NULL);
   gtk_window_set_default_size (GTK_WINDOW (dialog), 400, 450);
 
@@ -284,6 +377,7 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->icon_image = thunar_image_new ();
   gtk_box_pack_start (GTK_BOX (dialog->single_box), dialog->icon_image, FALSE, TRUE, 0);
+  gtk_widget_set_valign (GTK_WIDGET (dialog->icon_image), GTK_ALIGN_START);
   gtk_widget_show (dialog->icon_image);
 
   label = gtk_label_new_with_mnemonic (_("_Name:"));
@@ -305,7 +399,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
                     "focus-out-event", G_CALLBACK (thunar_properties_dialog_name_focus_out_event), dialog);
 
   gtk_grid_attach (GTK_GRID (grid), GTK_WIDGET (dialog->name_entry), 1, row, 1, 1);
-  exo_binding_new (G_OBJECT (dialog->single_box), "visible", G_OBJECT (dialog->name_entry), "visible");
+  g_object_bind_property (G_OBJECT (dialog->single_box), "visible",
+                          G_OBJECT (dialog->name_entry), "visible",
+                          G_BINDING_SYNC_CREATE);
 
   ++row;
 
@@ -315,7 +411,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
    */
   box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_grid_attach (GTK_GRID (grid), box, 0, row, 1, 1);
-  exo_binding_new_with_negation (G_OBJECT (dialog->single_box), "visible", G_OBJECT (box), "visible");
+  g_object_bind_property (G_OBJECT (dialog->single_box), "visible",
+                          G_OBJECT (box), "visible",
+                          G_BINDING_INVERT_BOOLEAN | G_BINDING_SYNC_CREATE);
 
   image = gtk_image_new_from_icon_name ("text-x-generic", GTK_ICON_SIZE_DIALOG);
   gtk_box_pack_start (GTK_BOX (box), image, FALSE, TRUE, 0);
@@ -333,14 +431,16 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
   gtk_grid_attach (GTK_GRID (grid), dialog->names_label, 1, row, 1, 1);
   gtk_label_set_ellipsize (GTK_LABEL (dialog->names_label), PANGO_ELLIPSIZE_END);
   gtk_label_set_selectable (GTK_LABEL (dialog->names_label), TRUE);
-  exo_binding_new (G_OBJECT (box), "visible", G_OBJECT (dialog->names_label), "visible");
+  g_object_bind_property (G_OBJECT (box), "visible",
+                          G_OBJECT (dialog->names_label), "visible",
+                          G_BINDING_SYNC_CREATE);
 
 
   ++row;
 
 
   /*
-     Second box (kind, open with, link target)
+     Second box (kind, open with, link target, original path, location, volume)
    */
   label = gtk_label_new (_("Kind:"));
   gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
@@ -351,7 +451,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
   dialog->kind_ebox = gtk_event_box_new ();
   gtk_event_box_set_above_child (GTK_EVENT_BOX (dialog->kind_ebox), TRUE);
   gtk_event_box_set_visible_window (GTK_EVENT_BOX (dialog->kind_ebox), FALSE);
-  exo_binding_new (G_OBJECT (dialog->kind_ebox), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->kind_ebox), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->kind_ebox, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->kind_ebox, 1, row, 1, 1);
   gtk_widget_show (dialog->kind_ebox);
@@ -372,7 +474,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->openwith_chooser = thunar_chooser_button_new ();
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), dialog->openwith_chooser);
-  exo_binding_new (G_OBJECT (dialog->openwith_chooser), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->openwith_chooser), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->openwith_chooser, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->openwith_chooser, 1, row, 1, 1);
   gtk_widget_show (dialog->openwith_chooser);
@@ -380,6 +484,7 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
   ++row;
 
   label = gtk_label_new (_("Link Target:"));
+  dialog->link_label_text = label;
   gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
   gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
   gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
@@ -387,7 +492,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->link_label = g_object_new (GTK_TYPE_LABEL, "ellipsize", PANGO_ELLIPSIZE_START, "xalign", 0.0f, NULL);
   gtk_label_set_selectable (GTK_LABEL (dialog->link_label), TRUE);
-  exo_binding_new (G_OBJECT (dialog->link_label), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->link_label), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->link_label, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->link_label, 1, row, 1, 1);
   gtk_widget_show (dialog->link_label);
@@ -406,7 +513,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->origin_label = g_object_new (GTK_TYPE_LABEL, "ellipsize", PANGO_ELLIPSIZE_START, "xalign", 0.0f, NULL);
   gtk_label_set_selectable (GTK_LABEL (dialog->origin_label), TRUE);
-  exo_binding_new (G_OBJECT (dialog->origin_label), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->origin_label), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->origin_label, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->origin_label, 1, row, 1, 1);
   gtk_widget_show (dialog->origin_label);
@@ -421,10 +530,43 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->location_label = g_object_new (GTK_TYPE_LABEL, "ellipsize", PANGO_ELLIPSIZE_START, "xalign", 0.0f, NULL);
   gtk_label_set_selectable (GTK_LABEL (dialog->location_label), TRUE);
-  exo_binding_new (G_OBJECT (dialog->location_label), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->location_label), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->location_label, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->location_label, 1, row, 1, 1);
   gtk_widget_show (dialog->location_label);
+
+  ++row;
+
+  label = gtk_label_new (_("Volume:"));
+  gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
+  gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
+  gtk_widget_show (label);
+
+  box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  g_object_bind_property (G_OBJECT (box), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
+  gtk_widget_set_hexpand (box, TRUE);
+  gtk_grid_attach (GTK_GRID (grid), box, 1, row, 1, 1);
+  gtk_widget_show (box);
+
+  dialog->volume_image = gtk_image_new ();
+  g_object_bind_property (G_OBJECT (dialog->volume_image), "visible",
+                          G_OBJECT (box), "visible",
+                          G_BINDING_SYNC_CREATE);
+  gtk_box_pack_start (GTK_BOX (box), dialog->volume_image, FALSE, TRUE, 0);
+  gtk_widget_show (dialog->volume_image);
+
+  dialog->volume_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
+  gtk_label_set_selectable (GTK_LABEL (dialog->volume_label), TRUE);
+  g_object_bind_property (G_OBJECT (dialog->volume_label), "visible",
+                          G_OBJECT (dialog->volume_image), "visible",
+                          G_BINDING_SYNC_CREATE);
+  gtk_box_pack_start (GTK_BOX (box), dialog->volume_label, TRUE, TRUE, 0);
+  gtk_widget_show (dialog->volume_label);
 
   ++row;
 
@@ -447,10 +589,29 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->deleted_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
   gtk_label_set_selectable (GTK_LABEL (dialog->deleted_label), TRUE);
-  exo_binding_new (G_OBJECT (dialog->deleted_label), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->deleted_label), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->deleted_label, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->deleted_label, 1, row, 1, 1);
   gtk_widget_show (dialog->deleted_label);
+
+  ++row;
+
+  label = gtk_label_new (_("Created:"));
+  gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
+  gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
+  gtk_widget_show (label);
+
+  dialog->created_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
+  gtk_label_set_selectable (GTK_LABEL (dialog->created_label), TRUE);
+  g_object_bind_property (G_OBJECT (dialog->created_label), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
+  gtk_widget_set_hexpand (dialog->created_label, TRUE);
+  gtk_grid_attach (GTK_GRID (grid), dialog->created_label, 1, row, 1, 1);
+  gtk_widget_show (dialog->created_label);
 
   ++row;
 
@@ -462,7 +623,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->modified_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
   gtk_label_set_selectable (GTK_LABEL (dialog->modified_label), TRUE);
-  exo_binding_new (G_OBJECT (dialog->modified_label), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->modified_label), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->modified_label, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->modified_label, 1, row, 1, 1);
   gtk_widget_show (dialog->modified_label);
@@ -477,7 +640,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   dialog->accessed_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
   gtk_label_set_selectable (GTK_LABEL (dialog->accessed_label), TRUE);
-  exo_binding_new (G_OBJECT (dialog->accessed_label), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->accessed_label), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (dialog->accessed_label, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->accessed_label, 1, row, 1, 1);
   gtk_widget_show (dialog->accessed_label);
@@ -487,13 +652,15 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
 
   spacer = g_object_new (GTK_TYPE_BOX, "orientation", GTK_ORIENTATION_VERTICAL, "height-request", 12, NULL);
   gtk_grid_attach (GTK_GRID (grid), spacer, 0, row, 2, 1);
-  exo_binding_new (G_OBJECT (dialog->accessed_label), "visible", G_OBJECT (spacer), "visible");
+  g_object_bind_property (G_OBJECT (dialog->accessed_label), "visible",
+                          G_OBJECT (spacer), "visible",
+                          G_BINDING_SYNC_CREATE);
 
   ++row;
 
 
   /*
-     Fourth box (size, volume, free space)
+     Fourth box (size)
    */
   label = gtk_label_new (_("Size:"));
   gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
@@ -502,35 +669,79 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
   gtk_widget_show (label);
 
   label = thunar_size_label_new ();
-  exo_binding_new (G_OBJECT (dialog), "files", G_OBJECT (label), "files");
+  g_object_bind_property (G_OBJECT (dialog), "files",
+                          G_OBJECT (label), "files",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_set_hexpand (label, TRUE);
   gtk_grid_attach (GTK_GRID (grid), label, 1, row, 1, 1);
   gtk_widget_show (label);
 
   ++row;
 
-  label = gtk_label_new (_("Volume:"));
+  label = gtk_label_new (_("Size on Disk:"));
   gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
   gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
   gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
-  box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  exo_binding_new (G_OBJECT (box), "visible", G_OBJECT (label), "visible");
-  gtk_widget_set_hexpand (box, TRUE);
-  gtk_grid_attach (GTK_GRID (grid), box, 1, row, 1, 1);
-  gtk_widget_show (box);
+  label = thunar_size_on_disk_label_new ();
+  g_object_bind_property (G_OBJECT (dialog), "files",
+                          G_OBJECT (label), "files",
+                          G_BINDING_SYNC_CREATE);
+  gtk_widget_set_hexpand (label, TRUE);
+  gtk_grid_attach (GTK_GRID (grid), label, 1, row, 1, 1);
+  gtk_widget_show (label);
 
-  dialog->volume_image = gtk_image_new ();
-  exo_binding_new (G_OBJECT (dialog->volume_image), "visible", G_OBJECT (box), "visible");
-  gtk_box_pack_start (GTK_BOX (box), dialog->volume_image, FALSE, TRUE, 0);
-  gtk_widget_show (dialog->volume_image);
+  ++row;
 
-  dialog->volume_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
-  gtk_label_set_selectable (GTK_LABEL (dialog->volume_label), TRUE);
-  exo_binding_new (G_OBJECT (dialog->volume_label), "visible", G_OBJECT (dialog->volume_image), "visible");
-  gtk_box_pack_start (GTK_BOX (box), dialog->volume_label, TRUE, TRUE, 0);
-  gtk_widget_show (dialog->volume_label);
+
+  spacer = g_object_new (GTK_TYPE_BOX, "orientation", GTK_ORIENTATION_VERTICAL, "height-request", 12, NULL);
+  gtk_grid_attach (GTK_GRID (grid), spacer, 0, row, 2, 1);
+  gtk_widget_show (spacer);
+
+  ++row;
+
+
+  /*
+     Fifth box (content, capacity, free space)
+   */
+  label = gtk_label_new (_("Content:"));
+  gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
+  gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
+  gtk_widget_show (label);
+  dialog->content_label = label;
+
+  label = thunar_content_label_new ();
+  g_object_bind_property (G_OBJECT (dialog), "files",
+                          G_OBJECT (label), "files",
+                          G_BINDING_SYNC_CREATE);
+  gtk_widget_set_hexpand (label, TRUE);
+  gtk_grid_attach (GTK_GRID (grid), label, 1, row, 1, 1);
+  gtk_widget_show (label);
+  dialog->content_value_label = label;
+
+  ++row;
+
+  label = gtk_label_new (_("Capacity:"));
+  gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
+  gtk_label_set_xalign (GTK_LABEL (label), 1.0f);
+  gtk_label_set_yalign (GTK_LABEL (label), 0.0f);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
+  gtk_widget_show (label);
+
+  dialog->capacity_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
+  gtk_widget_set_hexpand (dialog->capacity_vbox, TRUE);
+  gtk_grid_attach (GTK_GRID (grid), dialog->capacity_vbox, 1, row, 1, 1);
+  g_object_bind_property (G_OBJECT (dialog->capacity_vbox), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
+  gtk_widget_show (dialog->capacity_vbox);
+
+  dialog->capacity_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
+  gtk_label_set_selectable (GTK_LABEL (dialog->capacity_label), TRUE);
+  gtk_box_pack_start (GTK_BOX (dialog->capacity_vbox), dialog->capacity_label, TRUE, TRUE, 0);
+  gtk_widget_show (dialog->capacity_label);
 
   ++row;
 
@@ -544,7 +755,9 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
   dialog->freespace_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
   gtk_widget_set_hexpand (dialog->freespace_vbox, TRUE);
   gtk_grid_attach (GTK_GRID (grid), dialog->freespace_vbox, 1, row, 1, 1);
-  exo_binding_new (G_OBJECT (dialog->freespace_vbox), "visible", G_OBJECT (label), "visible");
+  g_object_bind_property (G_OBJECT (dialog->freespace_vbox), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_widget_show (dialog->freespace_vbox);
 
   dialog->freespace_label = g_object_new (GTK_TYPE_LABEL, "xalign", 0.0f, NULL);
@@ -571,17 +784,161 @@ thunar_properties_dialog_init (ThunarPropertiesDialog *dialog)
    */
   label = gtk_label_new (_("Emblems"));
   chooser = thunar_emblem_chooser_new ();
-  exo_binding_new (G_OBJECT (dialog), "files", G_OBJECT (chooser), "files");
+  g_object_bind_property (G_OBJECT (dialog), "files",
+                          G_OBJECT (chooser), "files",
+                          G_BINDING_SYNC_CREATE);
   gtk_notebook_append_page (GTK_NOTEBOOK (dialog->notebook), chooser, label);
   gtk_widget_show (chooser);
   gtk_widget_show (label);
+
+  /*
+     Highlight Color Chooser
+   */
+  if (dialog->show_file_highlight_tab)
+    {
+      grid = gtk_grid_new ();
+      label = gtk_label_new (_("Highlight"));
+      gtk_widget_set_halign (grid, GTK_ALIGN_CENTER);
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+      gtk_container_set_border_width (GTK_CONTAINER (grid), 12);
+      gtk_notebook_append_page (GTK_NOTEBOOK (dialog->notebook), grid, label);
+      gtk_widget_show (label);
+      gtk_widget_show (grid);
+
+      row = 0;
+
+      chooser = gtk_color_chooser_widget_new ();
+      dialog->color_chooser = chooser;
+      g_signal_connect_swapped (G_OBJECT (chooser), "notify::show-editor",
+                                G_CALLBACK (thunar_properties_dialog_color_editor_changed), dialog);
+      g_signal_connect_swapped (G_OBJECT (dialog->notebook), "switch-page",
+                                G_CALLBACK (thunar_properties_dialog_notebook_page_changed), dialog);
+      gtk_grid_attach (GTK_GRID (grid), chooser, 0, row, 1, 1);
+      gtk_widget_set_vexpand (chooser, TRUE);
+      gtk_widget_show (chooser);
+
+      row++;
+
+      /* check if gvfs metadata is supported */
+      if (G_UNLIKELY (!thunar_g_vfs_metadata_is_supported ()))
+        {
+          frame = g_object_new (GTK_TYPE_FRAME, "border-width", 0, "shadow-type", GTK_SHADOW_NONE, NULL);
+          gtk_grid_attach (GTK_GRID (grid), frame, 0, row, 1, 1);
+          gtk_widget_set_sensitive (dialog->color_chooser, FALSE);
+          gtk_widget_show (frame);
+
+          label = gtk_label_new (_("Missing dependencies"));
+          gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
+          gtk_frame_set_label_widget (GTK_FRAME (frame), label);
+          gtk_widget_show (label);
+
+          infobar = gtk_info_bar_new ();
+          gtk_container_set_border_width (GTK_CONTAINER (infobar), 12);
+          label = gtk_label_new (NULL);
+          gtk_label_set_markup (GTK_LABEL (label), _("It looks like <a href=\"https://wiki.gnome.org/Projects/gvfs\">gvfs</a> is not available.\n"
+                                                    "This feature will not work. "
+                                                    "<a href=\"https://docs.xfce.org/xfce/thunar/unix-filesystem#gnome_virtual_file_system\">[Read more]</a>"));
+          box = gtk_info_bar_get_content_area (GTK_INFO_BAR (infobar));
+          gtk_container_add (GTK_CONTAINER (box), label);
+          gtk_info_bar_set_message_type (GTK_INFO_BAR (infobar), GTK_MESSAGE_WARNING);
+          gtk_widget_show (label);
+          gtk_widget_show (infobar);
+          gtk_container_add (GTK_CONTAINER (frame), infobar);
+
+          row++;
+        }
+      else
+        {
+          dialog->example_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+          gtk_widget_set_name (dialog->example_box, "example");
+          gtk_widget_set_hexpand (dialog->example_box, TRUE);
+          gtk_widget_set_margin_top (dialog->example_box, 10);
+          gtk_widget_set_margin_bottom (dialog->example_box, 10);
+          gtk_grid_attach (GTK_GRID (grid), dialog->example_box, 0, row, 1, 1);
+          gtk_widget_show (dialog->example_box);
+
+          image = gtk_image_new_from_icon_name ("text-x-generic", GTK_ICON_SIZE_DIALOG);
+          gtk_box_pack_start (GTK_BOX (dialog->example_box), image, FALSE, FALSE, 5);
+          gtk_widget_set_margin_top (image, 5);
+          gtk_widget_set_margin_bottom (image, 5);
+          gtk_widget_show (image);
+
+          label = gtk_label_new_with_mnemonic (_("Example.txt"));
+          gtk_box_pack_start (GTK_BOX (dialog->example_box), label, TRUE, TRUE, 0);
+          gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+          gtk_widget_show (label);
+
+          row++;
+        }
+
+      box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+      dialog->highlight_buttons = box;
+      gtk_widget_set_hexpand (box, TRUE);
+      gtk_widget_set_vexpand (box, TRUE);
+      gtk_grid_attach (GTK_GRID (grid), box, 0, row, 1, 1);
+      if (G_UNLIKELY (!thunar_g_vfs_metadata_is_supported ()))
+        gtk_widget_set_sensitive (box, FALSE);
+      gtk_widget_show (box);
+
+      button = gtk_button_new_with_mnemonic (_("_Apply"));
+      gtk_style_context_add_class (gtk_widget_get_style_context (button), "suggested-action");
+      g_signal_connect_swapped (G_OBJECT (button), "clicked",
+                                G_CALLBACK (thunar_properties_dialog_apply_highlight), dialog);
+      gtk_box_pack_end (GTK_BOX (box), button, FALSE, FALSE, 0);
+      gtk_widget_set_vexpand (button, FALSE);
+      gtk_widget_set_valign (button, GTK_ALIGN_END);
+      gtk_widget_show (button);
+
+      dialog->highlight_apply_button = button;
+      gtk_widget_set_sensitive (dialog->highlight_apply_button, FALSE);
+
+      button = gtk_button_new_with_mnemonic (_("_Reset"));
+      g_signal_connect_swapped (G_OBJECT (button), "clicked",
+                                G_CALLBACK (thunar_properties_dialog_reset_highlight), dialog);
+      gtk_box_pack_end (GTK_BOX (box), button, FALSE, FALSE, 0);
+      gtk_widget_set_vexpand (button, FALSE);
+      gtk_widget_set_valign (button, GTK_ALIGN_END);
+      gtk_widget_show (button);
+
+      dialog->highlighting_spinner = gtk_spinner_new ();
+      gtk_box_pack_end (GTK_BOX (box), dialog->highlighting_spinner, FALSE, FALSE, 0);
+
+      button = gtk_button_new_with_mnemonic (_("Set _Foreground"));
+      g_signal_connect_swapped (G_OBJECT (button), "clicked",
+                                G_CALLBACK (thunar_properties_dialog_set_foreground), dialog);
+      gtk_box_pack_start (GTK_BOX (box), button, FALSE, FALSE, 0);
+      gtk_widget_set_vexpand (button, FALSE);
+      gtk_widget_set_valign (button, GTK_ALIGN_END);
+      gtk_widget_show (button);
+
+      button = gtk_button_new_with_mnemonic (_("Set _Background"));
+      g_signal_connect_swapped (G_OBJECT (button), "clicked",
+                                G_CALLBACK (thunar_properties_dialog_set_background), dialog);
+      gtk_box_pack_start (GTK_BOX (box), button, FALSE, FALSE, 0);
+      gtk_widget_set_vexpand (button, FALSE);
+      gtk_widget_set_valign (button, GTK_ALIGN_END);
+      gtk_widget_show (button);
+
+      box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+      dialog->editor_button = box;
+      gtk_grid_attach (GTK_GRID (grid), box, 0, row, 1, 1);
+
+      button = gtk_button_new_from_icon_name ("go-previous", GTK_ICON_SIZE_BUTTON);
+      g_signal_connect_swapped (G_OBJECT (button), "clicked",
+                                G_CALLBACK (thunar_properties_dialog_color_editor_close), dialog);
+      gtk_box_pack_start (GTK_BOX (box), button, TRUE, TRUE, 0);
+      gtk_widget_show (button);
+    }
 
   /*
      Permissions chooser
    */
   label = gtk_label_new (_("Permissions"));
   dialog->permissions_chooser = thunar_permissions_chooser_new ();
-  exo_binding_new (G_OBJECT (dialog), "files", G_OBJECT (dialog->permissions_chooser), "files");
+  g_object_bind_property (G_OBJECT (dialog), "files",
+                          G_OBJECT (dialog->permissions_chooser), "files",
+                          G_BINDING_SYNC_CREATE);
   gtk_notebook_append_page (GTK_NOTEBOOK (dialog->notebook), dialog->permissions_chooser, label);
   gtk_widget_show (dialog->permissions_chooser);
   gtk_widget_show (label);
@@ -613,21 +970,25 @@ thunar_properties_dialog_finalize (GObject *object)
   g_signal_handlers_disconnect_by_func (dialog->preferences, thunar_properties_dialog_reload, dialog);
   g_object_unref (dialog->preferences);
 
-  /* cancel any pending thumbnailer requests */
-  if (dialog->thumbnail_request > 0)
-    {
-      thunar_thumbnailer_dequeue (dialog->thumbnailer, dialog->thumbnail_request);
-      dialog->thumbnail_request = 0;
-    }
-
-  /* release the thumbnailer */
-  g_object_unref (dialog->thumbnailer);
 
   /* release the provider property pages */
   g_list_free_full (dialog->provider_pages, g_object_unref);
 
   /* drop the reference on the provider factory */
   g_object_unref (dialog->provider_factory);
+
+  if (dialog->highlight_change_job != NULL && dialog->highlight_change_job_finish_signal != 0)
+    g_signal_handler_disconnect (dialog->highlight_change_job, dialog->highlight_change_job_finish_signal);
+
+  g_free (dialog->foreground_color);
+  g_free (dialog->background_color);
+
+  if (dialog->rename_job != NULL)
+    {
+      g_signal_handlers_disconnect_by_data (dialog->rename_job, dialog);
+      g_object_unref (dialog->rename_job);
+      dialog->rename_job = NULL;
+    }
 
   (*G_OBJECT_CLASS (thunar_properties_dialog_parent_class)->finalize) (object);
 }
@@ -650,6 +1011,10 @@ thunar_properties_dialog_get_property (GObject    *object,
 
     case PROP_FILE_SIZE_BINARY:
       g_value_set_boolean (value, dialog->file_size_binary);
+      break;
+
+    case PROP_SHOW_FILE_HIGHLIGHT_TAB:
+      g_value_set_boolean (value, dialog->show_file_highlight_tab);
       break;
 
     default:
@@ -676,6 +1041,10 @@ thunar_properties_dialog_set_property (GObject      *object,
 
     case PROP_FILE_SIZE_BINARY:
       dialog->file_size_binary = g_value_get_boolean (value);
+      break;
+
+    case PROP_SHOW_FILE_HIGHLIGHT_TAB:
+      dialog->show_file_highlight_tab = g_value_get_boolean (value);
       break;
 
     default:
@@ -707,12 +1076,19 @@ thunar_properties_dialog_response (GtkDialog *dialog,
 }
 
 
+static void
+thunar_properties_file_reload_iter (gpointer data, gpointer user_data)
+{
+  ThunarFile *file = data;
+
+  thunar_file_reload (file);
+}
 
 static gboolean
 thunar_properties_dialog_reload (ThunarPropertiesDialog *dialog)
 {
   /* reload the active files */
-  g_list_foreach (dialog->files, (GFunc) (void (*)(void)) thunar_file_reload, NULL);
+  g_list_foreach (dialog->files, thunar_properties_file_reload_iter, NULL);
 
   return dialog->files != NULL;
 }
@@ -724,20 +1100,29 @@ thunar_properties_dialog_rename_error (ExoJob                 *job,
                                        GError                 *error,
                                        ThunarPropertiesDialog *dialog)
 {
+  ThunarFile *file;
+
   _thunar_return_if_fail (EXO_IS_JOB (job));
   _thunar_return_if_fail (error != NULL);
   _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
   _thunar_return_if_fail (g_list_length (dialog->files) == 1);
 
+  file = THUNAR_FILE (dialog->files->data);
+
   /* reset the entry display name to the original name, so the focus
      out event does not trigger the rename again by calling
      thunar_properties_dialog_name_activate */
   gtk_entry_set_text (GTK_ENTRY (xfce_filename_input_get_entry (dialog->name_entry)),
-                      thunar_file_get_display_name (THUNAR_FILE (dialog->files->data)));
+                      thunar_file_get_basename (file));
 
   /* display an error message */
-  thunar_dialogs_show_error (GTK_WIDGET (dialog), error, _("Failed to rename \"%s\""),
-                             thunar_file_get_display_name (THUNAR_FILE (dialog->files->data)));
+  if (g_strcmp0 (thunar_file_get_display_name (file), thunar_file_get_basename (file)) != 0)
+    thunar_dialogs_show_error (GTK_WIDGET (dialog), error, _("Failed to rename \"%s\" (%s)"),
+                               thunar_file_get_display_name (file),
+                               thunar_file_get_basename (file));
+  else
+    thunar_dialogs_show_error (GTK_WIDGET (dialog), error, _("Failed to rename \"%s\""),
+                               thunar_file_get_basename (file));
 }
 
 
@@ -750,8 +1135,12 @@ thunar_properties_dialog_rename_finished (ExoJob                 *job,
   _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
   _thunar_return_if_fail (g_list_length (dialog->files) == 1);
 
-  g_signal_handlers_disconnect_matched (job, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, dialog);
-  g_object_unref (job);
+  if (dialog->rename_job != NULL)
+    {
+      g_signal_handlers_disconnect_by_data (job, dialog);
+      g_object_unref (dialog->rename_job);
+      dialog->rename_job = NULL;
+    }
 }
 
 
@@ -762,27 +1151,28 @@ thunar_properties_dialog_name_activate (GtkWidget              *entry,
 {
   const gchar *old_name;
   const gchar *new_name;
-  ThunarJob   *job;
   ThunarFile  *file;
 
   _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
 
   /* check if we still have a valid file and if the user is allowed to rename */
   if (G_UNLIKELY (!gtk_widget_get_sensitive (GTK_WIDGET (xfce_filename_input_get_entry (dialog->name_entry)))
-      || g_list_length (dialog->files) != 1))
+                  || g_list_length (dialog->files) != 1))
     return;
 
   /* determine new and old name */
   file = THUNAR_FILE (dialog->files->data);
   new_name = xfce_filename_input_get_text (dialog->name_entry);
-  old_name = thunar_file_get_display_name (file);
+  old_name = thunar_file_get_basename (file);
   if (g_utf8_collate (new_name, old_name) != 0)
     {
-      job = thunar_io_jobs_rename_file (file, new_name);
-      if (job != NULL)
+      dialog->rename_job = thunar_io_jobs_rename_file (file, new_name, THUNAR_OPERATION_LOG_OPERATIONS);
+
+      if (dialog->rename_job != NULL)
         {
-          g_signal_connect (job, "error", G_CALLBACK (thunar_properties_dialog_rename_error), dialog);
-          g_signal_connect (job, "finished", G_CALLBACK (thunar_properties_dialog_rename_finished), dialog);
+          exo_job_launch (EXO_JOB (dialog->rename_job));
+          g_signal_connect (dialog->rename_job, "error", G_CALLBACK (thunar_properties_dialog_rename_error), dialog);
+          g_signal_connect (dialog->rename_job, "finished", G_CALLBACK (thunar_properties_dialog_rename_finished), dialog);
         }
     }
 }
@@ -822,10 +1212,13 @@ thunar_properties_dialog_icon_button_clicked (GtkWidget              *button,
   file = THUNAR_FILE (dialog->files->data);
 
   /* allocate the icon chooser */
-  title = g_strdup_printf (_("Select an Icon for \"%s\""), thunar_file_get_display_name (file));
+  if (g_strcmp0 (thunar_file_get_display_name (file), thunar_file_get_basename (file)) != 0)
+    title = g_strdup_printf (_("Select an Icon for \"%s\" (%s)"), thunar_file_get_display_name (file), thunar_file_get_basename (file));
+  else
+    title = g_strdup_printf (_("Select an Icon for \"%s\""), thunar_file_get_display_name (file));
   chooser = exo_icon_chooser_dialog_new (title, GTK_WINDOW (dialog),
                                          _("_Cancel"), GTK_RESPONSE_CANCEL,
-                                         _("_OK"), GTK_RESPONSE_ACCEPT,
+                                           _("_OK"), GTK_RESPONSE_ACCEPT,
                                          NULL);
   gtk_dialog_set_default_response (GTK_DIALOG (chooser), GTK_RESPONSE_ACCEPT);
   g_free (title);
@@ -846,9 +1239,14 @@ thunar_properties_dialog_icon_button_clicked (GtkWidget              *button,
           gtk_widget_hide (chooser);
 
           /* tell the user that we failed to change the icon of the .desktop file */
-          thunar_dialogs_show_error (GTK_WIDGET (dialog), err,
-                                     _("Failed to change icon of \"%s\""),
-                                     thunar_file_get_display_name (file));
+          if (g_strcmp0 (thunar_file_get_display_name (file), thunar_file_get_basename (file)) != 0)
+            thunar_dialogs_show_error (GTK_WIDGET (dialog), err,
+                                       _("Failed to change icon of \"%s\" (%s)"),
+                                       thunar_file_get_display_name (file), thunar_file_get_basename (file));
+          else
+            thunar_dialogs_show_error (GTK_WIDGET (dialog), err,
+                                       _("Failed to change icon of \"%s\""),
+                                       thunar_file_get_display_name (file));
           g_error_free (err);
         }
       g_free (icon);
@@ -921,15 +1319,20 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   gchar             *display_name;
   gchar             *fs_string;
   gchar             *str;
+  gchar             *content_type_desc = NULL;
   gchar             *volume_name;
   gchar             *volume_id;
   gchar             *volume_label;
+  guint64            capacity = 0;
+  gchar             *capacity_str = NULL;
   ThunarFile        *file;
   ThunarFile        *parent_file;
   gboolean           show_chooser;
   guint64            fs_free;
   guint64            fs_size;
   gdouble            fs_fraction = 0.0;
+  gchar             *background;
+  gchar             *foreground;
 
   _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
   _thunar_return_if_fail (g_list_length (dialog->files) == 1);
@@ -941,10 +1344,6 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   /* hide the permissions chooser for trashed files */
   gtk_widget_set_visible (dialog->permissions_chooser, !thunar_file_is_trashed (file));
 
-  /* queue a new thumbnail request */
-  thunar_thumbnailer_queue_file (dialog->thumbnailer, file,
-                                 &dialog->thumbnail_request);
-
   icon_theme = gtk_icon_theme_get_for_screen (gtk_widget_get_screen (GTK_WIDGET (dialog)));
   icon_factory = thunar_icon_factory_get_for_icon_theme (icon_theme);
 
@@ -953,7 +1352,10 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   g_object_get (G_OBJECT (dialog->preferences), "misc-date-custom-style", &date_custom_style, NULL);
 
   /* update the properties dialog title */
-  str = g_strdup_printf (_("%s - Properties"), thunar_file_get_display_name (file));
+  if (g_strcmp0 (thunar_file_get_display_name (file), thunar_file_get_basename (file)) != 0)
+    str = g_strdup_printf (_("%s (%s) - Properties"), thunar_file_get_display_name (file), thunar_file_get_basename (file));
+  else
+    str = g_strdup_printf (_("%s - Properties"), thunar_file_get_display_name (file));
   gtk_window_set_title (GTK_WINDOW (dialog), str);
   g_free (str);
 
@@ -963,8 +1365,7 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   /* check if the icon may be changed (only for writable .desktop files) */
   g_object_ref (G_OBJECT (dialog->icon_image));
   gtk_container_remove (GTK_CONTAINER (gtk_widget_get_parent (dialog->icon_image)), dialog->icon_image);
-  if (thunar_file_is_writable (file)
-      && thunar_file_is_desktop_file (file, NULL))
+  if (thunar_file_is_writable (file) && thunar_file_is_desktop_file (file))
     {
       gtk_container_add (GTK_CONTAINER (dialog->icon_button), dialog->icon_image);
       gtk_widget_show (dialog->icon_button);
@@ -979,7 +1380,7 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   /* update the name (if it differs) */
   gtk_editable_set_editable (GTK_EDITABLE (xfce_filename_input_get_entry (dialog->name_entry)),
                              thunar_file_is_renameable (file));
-  name = thunar_file_get_display_name (file);
+  name = thunar_file_get_basename (file);
   if (G_LIKELY (strcmp (name, xfce_filename_input_get_text (dialog->name_entry)) != 0))
     {
       gtk_entry_set_text (xfce_filename_input_get_entry (dialog->name_entry), name);
@@ -1004,15 +1405,10 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   content_type = thunar_file_get_content_type (file);
   if (content_type != NULL)
     {
-      if (G_UNLIKELY (g_content_type_equals (content_type, "inode/symlink")))
-        str = g_strdup (_("broken link"));
-      else if (G_UNLIKELY (thunar_file_is_symlink (file)))
-        str = g_strdup_printf (_("link to %s"), thunar_file_get_symlink_target (file));
-      else
-        str = g_content_type_get_description (content_type);
+      content_type_desc = thunar_file_get_content_type_desc (file);
       gtk_widget_set_tooltip_text (dialog->kind_ebox, content_type);
-      gtk_label_set_text (GTK_LABEL (dialog->kind_label), str);
-      g_free (str);
+      gtk_label_set_text (GTK_LABEL (dialog->kind_label), content_type_desc);
+      g_free (content_type_desc);
     }
   else
     {
@@ -1020,7 +1416,7 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
     }
 
   /* update the application chooser (shown only for non-executable regular files!) */
-  show_chooser = thunar_file_is_regular (file) && !thunar_file_is_executable (file);
+  show_chooser = thunar_file_is_regular (file) && !thunar_file_can_execute (file, NULL);
   gtk_widget_set_visible (dialog->openwith_chooser, show_chooser);
   if (show_chooser)
     thunar_chooser_button_set_file (THUNAR_CHOOSER_BUTTON (dialog->openwith_chooser), file);
@@ -1031,6 +1427,7 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
     {
       display_name = g_filename_display_name (path);
       gtk_label_set_text (GTK_LABEL (dialog->link_label), display_name);
+      gtk_widget_set_tooltip_text (dialog->link_label, display_name);
       gtk_widget_show (dialog->link_label);
       g_free (display_name);
     }
@@ -1059,6 +1456,7 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
     {
       display_name = g_file_get_parse_name (thunar_file_get_file (parent_file));
       gtk_label_set_text (GTK_LABEL (dialog->location_label), display_name);
+      gtk_widget_set_tooltip_text (dialog->location_label, display_name);
       gtk_widget_show (dialog->location_label);
       g_object_unref (G_OBJECT (parent_file));
       g_free (display_name);
@@ -1066,6 +1464,44 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
   else
     {
       gtk_widget_hide (dialog->location_label);
+    }
+
+  /* update the volume */
+  volume = thunar_file_get_volume (file);
+  if (G_LIKELY (volume != NULL))
+    {
+      gicon = g_volume_get_icon (volume);
+      gtk_image_set_from_gicon (GTK_IMAGE (dialog->volume_image), gicon, GTK_ICON_SIZE_MENU);
+      if (G_LIKELY (gicon != NULL))
+        g_object_unref (gicon);
+
+      volume_name = g_volume_get_name (volume);
+      volume_id = g_volume_get_identifier (volume, G_VOLUME_IDENTIFIER_KIND_UNIX_DEVICE);
+      volume_label = g_strdup_printf ("%s (%s)", volume_name, volume_id);
+      gtk_label_set_text (GTK_LABEL (dialog->volume_label), volume_label);
+      gtk_widget_show (dialog->volume_label);
+      g_free (volume_name);
+      g_free (volume_id);
+      g_free (volume_label);
+
+      g_object_unref (G_OBJECT (volume));
+    }
+  else
+    {
+      gtk_widget_hide (dialog->volume_label);
+    }
+
+  /* update the created time */
+  date = thunar_file_get_date_string (file, THUNAR_FILE_DATE_CREATED, date_style, date_custom_style);
+  if (G_LIKELY (date != NULL))
+    {
+      gtk_label_set_text (GTK_LABEL (dialog->created_label), date);
+      gtk_widget_show (dialog->created_label);
+      g_free (date);
+    }
+  else
+    {
+      gtk_widget_hide (dialog->created_label);
     }
 
   /* update the deleted time */
@@ -1107,9 +1543,16 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
       gtk_widget_hide (dialog->accessed_label);
     }
 
-  /* update the free space (only for folders) */
+  /* update the capacity and the free space (only for folders) */
   if (thunar_file_is_directory (file))
     {
+      /* capacity (space of containing volume) */
+      if (thunar_g_file_get_free_space (thunar_file_get_file (file), NULL, &capacity))
+        capacity_str = g_format_size_full (capacity, dialog->file_size_binary ? G_FORMAT_SIZE_IEC_UNITS : G_FORMAT_SIZE_DEFAULT);
+      gtk_label_set_text (GTK_LABEL (dialog->capacity_label), capacity_str);
+      g_free (capacity_str);
+
+      /* free space */
       fs_string = thunar_g_file_get_free_space_string (thunar_file_get_file (file),
                                                        dialog->file_size_binary);
       if (thunar_g_file_get_free_space (thunar_file_get_file (file), &fs_free, &fs_size)
@@ -1132,36 +1575,22 @@ thunar_properties_dialog_update_single (ThunarPropertiesDialog *dialog)
     }
   else
     {
+      gtk_widget_hide (dialog->capacity_vbox);
       gtk_widget_hide (dialog->freespace_vbox);
     }
 
-  /* update the volume */
-  volume = thunar_file_get_volume (file);
-  if (G_LIKELY (volume != NULL))
+  if (dialog->show_file_highlight_tab && G_LIKELY (thunar_g_vfs_metadata_is_supported ()))
     {
-      gicon = g_volume_get_icon (volume);
-      gtk_image_set_from_gicon (GTK_IMAGE (dialog->volume_image), gicon, GTK_ICON_SIZE_MENU);
-      if (G_LIKELY (gicon != NULL))
-        g_object_unref (gicon);
-
-      volume_name = g_volume_get_name (volume);
-      volume_id = g_volume_get_identifier (volume, G_VOLUME_IDENTIFIER_KIND_UNIX_DEVICE);
-      volume_label= g_strdup_printf ("%s (%s)", volume_name, volume_id);
-      gtk_label_set_text (GTK_LABEL (dialog->volume_label), volume_label);
-      gtk_widget_show (dialog->volume_label);
-      g_free (volume_name);
-      g_free (volume_id);
-      g_free (volume_label);
-
-      g_object_unref (G_OBJECT (volume));
-    }
-  else
-    {
-      gtk_widget_hide (dialog->volume_label);
+      background = thunar_file_get_metadata_setting (file, "highlight-color-background");
+      foreground = thunar_file_get_metadata_setting (file, "highlight-color-foreground");
+      thunar_properties_dialog_colorize_example_box (dialog, background, foreground);
+      g_free (foreground);
+      g_free (background);
     }
 
   /* cleanup */
   g_object_unref (G_OBJECT (icon_factory));
+  g_free (date_custom_style);
 }
 
 
@@ -1186,6 +1615,8 @@ thunar_properties_dialog_update_multiple (ThunarPropertiesDialog *dialog)
   ThunarFile  *parent_file = NULL;
   ThunarFile  *tmp_parent;
   gboolean     has_trashed_files = FALSE;
+  GString     *str_of_resolved_paths = g_string_new (NULL);
+  const gchar *resolved_path;
 
   _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
   _thunar_return_if_fail (g_list_length (dialog->files) > 1);
@@ -1194,9 +1625,11 @@ thunar_properties_dialog_update_multiple (ThunarPropertiesDialog *dialog)
   gtk_window_set_title (GTK_WINDOW (dialog), _("Properties"));
 
   /* widgets not used with > 1 file selected */
+  gtk_widget_hide (dialog->created_label);
   gtk_widget_hide (dialog->deleted_label);
   gtk_widget_hide (dialog->modified_label);
   gtk_widget_hide (dialog->accessed_label);
+  gtk_widget_hide (dialog->capacity_vbox);
   gtk_widget_hide (dialog->freespace_vbox);
   gtk_widget_hide (dialog->origin_label);
   gtk_widget_hide (dialog->openwith_chooser);
@@ -1210,10 +1643,27 @@ thunar_properties_dialog_update_multiple (ThunarPropertiesDialog *dialog)
       _thunar_assert (THUNAR_IS_FILE (lp->data));
       file = THUNAR_FILE (lp->data);
 
+      resolved_path = thunar_file_is_symlink (file) ? thunar_file_get_symlink_target (file) : NULL;
+      /* check if the file is a symlink, and get its resolved path */
+      if (resolved_path != NULL)
+        {
+          /* If there is even a single symlink then make 'Link Targets' visible and rename it to 'Link Targets' */
+          gtk_widget_show (dialog->link_label);
+          gtk_label_set_text (GTK_LABEL (dialog->link_label_text), _("Link Targets:"));
+
+          /* Add , only if there was a resolved path before*/
+          if (str_of_resolved_paths->len != 0)
+            g_string_append (str_of_resolved_paths, ", ");
+
+          g_string_append (str_of_resolved_paths, thunar_file_get_basename (file));
+          g_string_append (str_of_resolved_paths, ": ");
+          g_string_append (str_of_resolved_paths, resolved_path);
+        }
+
       /* append the name */
       if (!first_file)
         g_string_append (names_string, ", ");
-      g_string_append (names_string, thunar_file_get_display_name (file));
+      g_string_append (names_string, thunar_file_get_basename (file));
 
       /* update the content type */
       if (first_file)
@@ -1294,11 +1744,25 @@ thunar_properties_dialog_update_multiple (ThunarPropertiesDialog *dialog)
       gtk_label_set_text (GTK_LABEL (dialog->kind_label), _("mixed"));
     }
 
+  /* update the link target */
+  if (G_LIKELY (str_of_resolved_paths->len > 0))
+    {
+      gtk_label_set_text (GTK_LABEL (dialog->link_label), str_of_resolved_paths->str);
+      gtk_widget_set_tooltip_text (dialog->link_label, str_of_resolved_paths->str);
+      gtk_widget_show (dialog->link_label);
+    }
+  else
+    {
+      gtk_widget_hide (dialog->link_label);
+    }
+  g_string_free (str_of_resolved_paths, TRUE);
+
   /* update the file or folder location (parent) */
   if (G_UNLIKELY (parent_file != NULL))
     {
       display_name = g_file_get_parse_name (thunar_file_get_file (parent_file));
       gtk_label_set_text (GTK_LABEL (dialog->location_label), display_name);
+      gtk_widget_set_tooltip_text (dialog->location_label, display_name);
       gtk_widget_show (dialog->location_label);
       g_object_unref (G_OBJECT (parent_file));
       g_free (display_name);
@@ -1341,13 +1805,6 @@ thunar_properties_dialog_update (ThunarPropertiesDialog *dialog)
   _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
   _thunar_return_if_fail (dialog->files != NULL);
 
-  /* cancel any pending thumbnail requests */
-  if (dialog->thumbnail_request > 0)
-    {
-      thunar_thumbnailer_dequeue (dialog->thumbnailer, dialog->thumbnail_request);
-      dialog->thumbnail_request = 0;
-    }
-
   if (dialog->files->next == NULL)
     {
       /* show single file name box */
@@ -1364,6 +1821,17 @@ thunar_properties_dialog_update (ThunarPropertiesDialog *dialog)
       /* update the properties for a dialog showing multiple files */
       thunar_properties_dialog_update_multiple (dialog);
     }
+
+  if (g_list_length (dialog->files) == 1 && thunar_file_is_directory (dialog->files->data) == FALSE)
+    {
+      gtk_widget_hide (dialog->content_label);
+      gtk_widget_hide (dialog->content_value_label);
+    }
+  else
+    {
+      gtk_widget_show (dialog->content_label);
+      gtk_widget_show (dialog->content_value_label);
+    }
 }
 
 
@@ -1371,6 +1839,7 @@ thunar_properties_dialog_update (ThunarPropertiesDialog *dialog)
 /**
  * thunar_properties_dialog_new:
  * @parent: transient window or NULL;
+ * @flags: flags to consider
  *
  * Allocates a new #ThunarPropertiesDialog instance,
  * that is not associated with any #ThunarFile.
@@ -1378,13 +1847,16 @@ thunar_properties_dialog_update (ThunarPropertiesDialog *dialog)
  * Return value: the newly allocated #ThunarPropertiesDialog
  *               instance.
  **/
-GtkWidget*
-thunar_properties_dialog_new (GtkWindow *parent)
+GtkWidget *
+thunar_properties_dialog_new (GtkWindow                  *parent,
+                              ThunarPropertiesDialogFlags flags)
 {
   _thunar_return_val_if_fail (parent == NULL || GTK_IS_WINDOW (parent), NULL);
+
   return g_object_new (THUNAR_TYPE_PROPERTIES_DIALOG,
                        "transient-for", parent,
                        "destroy-with-parent", parent != NULL,
+                       "show-file-hightlight-tab", flags & THUNAR_PROPERTIES_DIALOG_SHOW_HIGHLIGHT,
                        NULL);
 }
 
@@ -1401,7 +1873,7 @@ thunar_properties_dialog_new (GtkWindow *parent)
  * Return value: list of #ThunarFile's displayed by @dialog
  *               or %NULL.
  **/
-static GList*
+static GList *
 thunar_properties_dialog_get_files (ThunarPropertiesDialog *dialog)
 {
   _thunar_return_val_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog), NULL);
@@ -1510,4 +1982,256 @@ thunar_properties_dialog_set_file (ThunarPropertiesDialog *dialog,
 
       thunar_properties_dialog_set_files (dialog, &foo);
     }
+}
+
+
+
+static void
+_make_highlight_buttons_sensitive (gpointer data)
+{
+  ThunarPropertiesDialog *dialog = THUNAR_PROPERTIES_DIALOG (data);
+
+  gtk_widget_set_sensitive (dialog->highlight_buttons, TRUE);
+  gtk_spinner_stop (GTK_SPINNER (dialog->highlighting_spinner));
+  gtk_widget_hide (dialog->highlighting_spinner);
+
+  /* FIXME: this slows things down & is it required ? because the view is correctly updated */
+  /* but without this the cells won't refresh unless we hover over it or scroll or select the window */
+  // thunar_properties_dialog_reload (dialog);
+
+  thunar_properties_dialog_update_apply_button (dialog);
+
+  g_object_unref (dialog->highlight_change_job);
+  dialog->highlight_change_job = NULL;
+  dialog->highlight_change_job_finish_signal = 0;
+}
+
+
+
+static void
+thunar_properties_dialog_reset_highlight (ThunarPropertiesDialog *dialog)
+{
+  _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
+
+  /* make the highlight buttons (set_background, set_foreground, reset, apply) insensitive */
+  gtk_widget_set_sensitive (dialog->highlight_buttons, FALSE);
+  gtk_widget_show (dialog->highlighting_spinner);
+  gtk_spinner_start (GTK_SPINNER (dialog->highlighting_spinner));
+
+  dialog->highlight_change_job = thunar_io_jobs_clear_metadata_for_files (dialog->files,
+                                                                          "thunar-highlight-color-background",
+                                                                          "thunar-highlight-color-foreground", NULL);
+
+  dialog->highlight_change_job_finish_signal =
+  g_signal_connect_swapped (dialog->highlight_change_job, "finished",
+                            G_CALLBACK (_make_highlight_buttons_sensitive), dialog);
+  exo_job_launch (EXO_JOB (dialog->highlight_change_job));
+
+  /* clear previouly set colors */
+  g_free (dialog->foreground_color);
+  dialog->foreground_color = NULL;
+  g_free (dialog->background_color);
+  dialog->background_color = NULL;
+
+  thunar_properties_dialog_colorize_example_box (dialog, NULL, NULL);
+
+  /* update the dialog & apply btn after the job is done i.e in the callback */
+}
+
+
+
+static void
+thunar_properties_dialog_apply_highlight (ThunarPropertiesDialog *dialog)
+{
+  gboolean highlighting_enabled;
+
+  if (dialog->foreground_color == NULL && dialog->background_color == NULL)
+    /* nothing to do here */
+    return;
+
+  /* if this feature is disabled, then enable the feature */
+  if (dialog->foreground_color != NULL || dialog->background_color != NULL)
+    {
+      g_object_get (G_OBJECT (dialog->preferences), "misc-highlighting-enabled", &highlighting_enabled, NULL);
+      if (!highlighting_enabled)
+        g_object_set (G_OBJECT (dialog->preferences), "misc-highlighting-enabled", TRUE, NULL);
+    }
+
+  gtk_widget_set_sensitive (dialog->highlight_buttons, FALSE);
+  gtk_widget_show (dialog->highlighting_spinner);
+  gtk_spinner_start (GTK_SPINNER (dialog->highlighting_spinner));
+
+  if (dialog->foreground_color != NULL && dialog->background_color != NULL)
+    dialog->highlight_change_job =
+    thunar_io_jobs_set_metadata_for_files (dialog->files, THUNAR_GTYPE_STRING,
+                                           "thunar-highlight-color-foreground", dialog->foreground_color,
+                                           "thunar-highlight-color-background", dialog->background_color,
+                                           NULL);
+  else if (dialog->background_color != NULL)
+    dialog->highlight_change_job =
+    thunar_io_jobs_set_metadata_for_files (dialog->files, THUNAR_GTYPE_STRING,
+                                           "thunar-highlight-color-background", dialog->background_color,
+                                           NULL);
+  /* we are sure that if we reach thus far foreground_color cannot be NULL */
+  else
+    dialog->highlight_change_job =
+    thunar_io_jobs_set_metadata_for_files (dialog->files, THUNAR_GTYPE_STRING,
+                                           "thunar-highlight-color-foreground", dialog->foreground_color,
+                                           NULL);
+
+  dialog->highlight_change_job_finish_signal =
+  g_signal_connect_swapped (dialog->highlight_change_job, "finished",
+                            G_CALLBACK (_make_highlight_buttons_sensitive), dialog);
+  exo_job_launch (EXO_JOB (dialog->highlight_change_job));
+
+  /* update the dialog & apply btn after the job is done i.e in the callback */
+}
+
+
+
+static void
+thunar_properties_dialog_set_foreground (ThunarPropertiesDialog *dialog)
+{
+  GdkRGBA color;
+  gchar  *color_str;
+
+  _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
+
+  gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER (dialog->color_chooser), &color);
+  color_str = gdk_rgba_to_string (&color);
+  thunar_properties_dialog_colorize_example_box (dialog, NULL, color_str);
+  g_free (dialog->foreground_color);
+  dialog->foreground_color = color_str;
+  thunar_properties_dialog_update_apply_button (dialog);
+}
+
+
+
+static void
+thunar_properties_dialog_set_background (ThunarPropertiesDialog *dialog)
+{
+  GdkRGBA color;
+  gchar  *color_str;
+
+  _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
+
+  gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER (dialog->color_chooser), &color);
+  color_str = gdk_rgba_to_string (&color);
+  thunar_properties_dialog_colorize_example_box (dialog, color_str, NULL);
+  g_free (dialog->background_color);
+  dialog->background_color = color_str;
+  thunar_properties_dialog_update_apply_button (dialog);
+}
+
+
+
+static void
+thunar_properties_dialog_update_apply_button (ThunarPropertiesDialog *dialog)
+{
+  gchar *foreground;
+  gchar *background;
+
+  for (GList *lp = dialog->files; lp != NULL; lp = lp->next)
+    {
+      foreground = thunar_file_get_metadata_setting (lp->data, "thunar-highlight-color-foreground");
+      if (dialog->foreground_color != NULL && g_strcmp0 (dialog->foreground_color, foreground) != 0)
+        {
+          g_free (foreground);
+          gtk_widget_set_sensitive (dialog->highlight_apply_button, TRUE);
+          return;
+        }
+      g_free (foreground);
+
+      background = thunar_file_get_metadata_setting (lp->data, "thunar-highlight-color-background");
+      if (dialog->background_color != NULL && g_strcmp0 (dialog->background_color, background) != 0)
+        {
+          g_free (background);
+          gtk_widget_set_sensitive (dialog->highlight_apply_button, TRUE);
+          return;
+        }
+      g_free (background);
+    }
+
+  gtk_widget_set_sensitive (dialog->highlight_apply_button, FALSE);
+}
+
+
+
+static void
+thunar_properties_dialog_colorize_example_box (ThunarPropertiesDialog *dialog,
+                                               const gchar            *background,
+                                               const gchar            *foreground)
+{
+  GtkCssProvider *provider = gtk_css_provider_new ();
+  gchar          *css_data = NULL;
+
+  _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
+
+  gtk_widget_reset_style (dialog->example_box);
+
+  if (background != NULL && foreground != NULL)
+    css_data = g_strdup_printf ("#example { background-color: %s; color: %s; }", background, foreground);
+  else if (background != NULL)
+    css_data = g_strdup_printf ("#example { background-color: %s; }", background);
+  else if (foreground != NULL)
+    css_data = g_strdup_printf ("#example { color: %s; }", foreground);
+  else
+    css_data = g_strdup_printf ("#example { color: inherit; background-color: inherit; }");
+
+  if (css_data == NULL)
+    return;
+
+  gtk_css_provider_load_from_data (provider, css_data, -1, NULL);
+  gtk_style_context_add_provider (gtk_widget_get_style_context (dialog->example_box), GTK_STYLE_PROVIDER (provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+  gtk_widget_show (dialog->example_box);
+  g_free (css_data);
+}
+
+
+
+static void
+thunar_properties_dialog_color_editor_changed (ThunarPropertiesDialog *dialog)
+{
+  gboolean show_editor;
+
+  _thunar_return_if_fail (THUNAR_IS_PROPERTIES_DIALOG (dialog));
+
+  g_object_get (dialog->color_chooser, "show-editor", &show_editor, NULL);
+
+  if (show_editor)
+    {
+      gtk_widget_show (dialog->editor_button);
+      gtk_widget_hide (dialog->example_box);
+      gtk_widget_hide (dialog->highlight_buttons);
+    }
+  else
+    {
+      gtk_widget_hide (dialog->editor_button);
+      gtk_widget_show (dialog->example_box);
+      gtk_widget_show (dialog->highlight_buttons);
+    }
+}
+
+
+
+static void
+thunar_properties_dialog_color_editor_close (ThunarPropertiesDialog *dialog)
+{
+  GdkRGBA color;
+
+  gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER (dialog->color_chooser), &color);
+  gtk_color_chooser_set_rgba (GTK_COLOR_CHOOSER (dialog->color_chooser), &color);
+
+  g_object_set (G_OBJECT (dialog->color_chooser), "show-editor", FALSE, NULL);
+}
+
+
+
+static void
+thunar_properties_dialog_notebook_page_changed (ThunarPropertiesDialog *dialog)
+{
+  /* if the highlight tab is not active then the color editor should be switched off */
+  if (gtk_notebook_get_current_page (GTK_NOTEBOOK (dialog->notebook)) != NOTEBOOK_PAGE_HIGHLIGHT)
+    g_object_set (G_OBJECT (dialog->color_chooser), "show-editor", FALSE, NULL);
 }

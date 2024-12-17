@@ -21,14 +21,14 @@
 
 <book id="index" xmlns:xi="http://www.w3.org/2003/XInclude">
   <bookinfo>
-    <title>&package_name; Reference Manual</title>
+    <title>thunarx Reference Manual</title>
     <releaseinfo>
       For &package_string;.
       The latest version of this documentation can be found on-line at
       <ulink role="online-location" url="https://developer.xfce.org/&package_name;/index.html">https://developer.xfce.org/&package_name;/</ulink>.
     </releaseinfo>
     <copyright>
-      <year>2021</year>
+      <year>2024</year>
       <holder>The Xfce Development Team</holder>
     </copyright>
   </bookinfo>

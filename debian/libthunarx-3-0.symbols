@@ -29,16 +29,13 @@ libthunarx-3.so.0 libthunarx-3-0 #MINVER#
  thunarx_menu_item_set_menu@Base 1.7.0
  thunarx_menu_item_set_sensitive@Base 1.7.0
  thunarx_menu_new@Base 1.7.0
-#MISSING: 1.7.0-1# thunarx_menu_provider_get_dnd_actions@Base 1.1.0
+ thunarx_menu_prepend_item@Base 4.17.6
  thunarx_menu_provider_get_dnd_menu_items@Base 1.7.0
-#MISSING: 1.7.0-1# thunarx_menu_provider_get_file_actions@Base 1.1.0
  thunarx_menu_provider_get_file_menu_items@Base 1.7.0
-#MISSING: 1.7.0-1# thunarx_menu_provider_get_folder_actions@Base 1.1.0
  thunarx_menu_provider_get_folder_menu_items@Base 1.7.0
  thunarx_menu_provider_get_type@Base 1.1.0
  thunarx_micro_version@Base 1.1.0
  thunarx_minor_version@Base 1.1.0
-#MISSING: 1.7.0-1# thunarx_preferences_provider_get_actions@Base 1.1.0
  thunarx_preferences_provider_get_menu_items@Base 1.7.0
  thunarx_preferences_provider_get_type@Base 1.1.0
  thunarx_property_page_get_label@Base 1.1.0
@@ -64,7 +61,6 @@ libthunarx-3.so.0 libthunarx-3-0 #MINVER#
  thunarx_provider_plugin_register_type@Base 1.1.0
  thunarx_provider_plugin_set_resident@Base 1.1.0
  thunarx_renamer_changed@Base 1.1.0
-#MISSING: 1.7.0-1# thunarx_renamer_get_actions@Base 1.1.0
  thunarx_renamer_get_help_url@Base 1.1.0
  thunarx_renamer_get_menu_items@Base 1.7.0
  thunarx_renamer_get_name@Base 1.1.0

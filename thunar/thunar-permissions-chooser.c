@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -33,18 +33,19 @@
 #include <unistd.h>
 #endif
 
-#include <exo/exo.h>
+#include "thunar/thunar-dialogs.h"
+#include "thunar/thunar-enum-types.h"
+#include "thunar/thunar-gobject-extensions.h"
+#include "thunar/thunar-gtk-extensions.h"
+#include "thunar/thunar-io-jobs.h"
+#include "thunar/thunar-pango-extensions.h"
+#include "thunar/thunar-permissions-chooser.h"
+#include "thunar/thunar-preferences.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-user.h"
 
-#include <thunar/thunar-dialogs.h>
-#include <thunar/thunar-enum-types.h>
-#include <thunar/thunar-gobject-extensions.h>
-#include <thunar/thunar-gtk-extensions.h>
-#include <thunar/thunar-io-jobs.h>
-#include <thunar/thunar-pango-extensions.h>
-#include <thunar/thunar-permissions-chooser.h>
-#include <thunar/thunar-preferences.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-user.h>
+#include <exo/exo.h>
+#include <libxfce4ui/libxfce4ui.h>
 
 
 
@@ -73,54 +74,74 @@ enum
 
 
 
-static void                 thunar_permissions_chooser_finalize         (GObject                        *object);
-static void                 thunar_permissions_chooser_get_property     (GObject                        *object,
-                                                                         guint                           prop_id,
-                                                                         GValue                         *value,
-                                                                         GParamSpec                     *pspec);
-static void                 thunar_permissions_chooser_set_property     (GObject                        *object,
-                                                                         guint                           prop_id,
-                                                                         const GValue                   *value,
-                                                                         GParamSpec                     *pspec);
-static gint                 thunar_permissions_chooser_ask_recursive    (ThunarPermissionsChooser       *chooser);
-static void                 thunar_permissions_chooser_change_group     (ThunarPermissionsChooser       *chooser,
-                                                                         guint32                         gid);
-static gboolean             thunar_permissions_chooser_change_mode      (ThunarPermissionsChooser       *chooser,
-                                                                         ThunarFileMode                  dir_mask,
-                                                                         ThunarFileMode                  dir_mode,
-                                                                         ThunarFileMode                  file_mask,
-                                                                         ThunarFileMode                  file_mode);
-static void                 thunar_permissions_chooser_access_changed   (ThunarPermissionsChooser       *chooser,
-                                                                         GtkWidget                      *combo);
-static void                 thunar_permissions_chooser_file_changed     (ThunarPermissionsChooser       *chooser);
-static void                 thunar_permissions_chooser_group_changed    (ThunarPermissionsChooser       *chooser,
-                                                                         GtkWidget                      *combo);
-static void                 thunar_permissions_chooser_program_toggled  (ThunarPermissionsChooser       *chooser,
-                                                                         GtkWidget                      *button);
-static void                 thunar_permissions_chooser_fixperm_clicked  (ThunarPermissionsChooser       *chooser,
-                                                                         GtkWidget                      *button);
-static ThunarJobResponse    thunar_permissions_chooser_job_ask          (ThunarPermissionsChooser       *chooser,
-                                                                         const gchar                    *message,
-                                                                         ThunarJobResponse               choices,
-                                                                         ThunarJob                      *job);
-static void                 thunar_permissions_chooser_job_cancel       (ThunarPermissionsChooser       *chooser);
-static void                 thunar_permissions_chooser_job_error        (ThunarPermissionsChooser       *chooser,
-                                                                         GError                         *error,
-                                                                         ThunarJob                      *job);
-static void                 thunar_permissions_chooser_job_finished     (ThunarPermissionsChooser       *chooser,
-                                                                         ThunarJob                      *job);
-static void                 thunar_permissions_chooser_job_percent      (ThunarPermissionsChooser       *chooser,
-                                                                         gdouble                         percent,
-                                                                         ThunarJob                      *job);
-static void                 thunar_permissions_chooser_job_start        (ThunarPermissionsChooser       *chooser,
-                                                                         ThunarJob                      *job,
-                                                                         gboolean                        recursive);
-static gboolean             thunar_permissions_chooser_row_separator    (GtkTreeModel                   *model,
-                                                                         GtkTreeIter                    *iter,
-                                                                         gpointer                        data);
-static GList               *thunar_permissions_chooser_get_files        (ThunarPermissionsChooser       *chooser);
-static void                 thunar_permissions_chooser_set_files        (ThunarPermissionsChooser       *chooser,
-                                                                         GList                          *files);
+static void
+thunar_permissions_chooser_finalize (GObject *object);
+static void
+thunar_permissions_chooser_get_property (GObject    *object,
+                                         guint       prop_id,
+                                         GValue     *value,
+                                         GParamSpec *pspec);
+static void
+thunar_permissions_chooser_set_property (GObject      *object,
+                                         guint         prop_id,
+                                         const GValue *value,
+                                         GParamSpec   *pspec);
+static gint
+thunar_permissions_chooser_ask_recursive (ThunarPermissionsChooser *chooser);
+static void
+thunar_permissions_chooser_change_group (ThunarPermissionsChooser *chooser,
+                                         guint32                   gid);
+static gboolean
+thunar_permissions_chooser_change_mode (ThunarPermissionsChooser *chooser,
+                                        ThunarFileMode            dir_mask,
+                                        ThunarFileMode            dir_mode,
+                                        ThunarFileMode            file_mask,
+                                        ThunarFileMode            file_mode);
+static void
+thunar_permissions_chooser_access_changed (ThunarPermissionsChooser *chooser,
+                                           GtkWidget                *combo);
+static void
+thunar_permissions_chooser_file_changed (ThunarPermissionsChooser *chooser);
+static void
+thunar_permissions_chooser_group_changed (ThunarPermissionsChooser *chooser,
+                                          GtkWidget                *combo);
+static void
+thunar_permissions_chooser_program_toggled (ThunarPermissionsChooser *chooser,
+                                            GtkWidget                *button);
+static void
+thunar_permissions_chooser_fixperm_clicked (ThunarPermissionsChooser *chooser,
+                                            GtkWidget                *button);
+static ThunarJobResponse
+thunar_permissions_chooser_job_ask (ThunarPermissionsChooser *chooser,
+                                    const gchar              *message,
+                                    ThunarJobResponse         choices,
+                                    ThunarJob                *job);
+static void
+thunar_permissions_chooser_job_cancel (ThunarPermissionsChooser *chooser);
+static void
+thunar_permissions_chooser_job_error (ThunarPermissionsChooser *chooser,
+                                      GError                   *error,
+                                      ThunarJob                *job);
+static void
+thunar_permissions_chooser_job_finished (ThunarPermissionsChooser *chooser,
+                                         ThunarJob                *job);
+static void
+thunar_permissions_chooser_job_percent (ThunarPermissionsChooser *chooser,
+                                        gdouble                   percent,
+                                        ThunarJob                *job);
+static void
+thunar_permissions_chooser_job_start (ThunarPermissionsChooser *chooser,
+                                      ThunarJob                *job,
+                                      gboolean                  recursive);
+static gboolean
+thunar_permissions_chooser_row_separator (GtkTreeModel *model,
+                                          GtkTreeIter  *iter,
+                                          gpointer      data);
+static GList *
+thunar_permissions_chooser_get_files (ThunarPermissionsChooser *chooser);
+static void
+thunar_permissions_chooser_set_files (ThunarPermissionsChooser *chooser,
+                                      GList                    *files);
 
 
 struct _ThunarPermissionsChooserClass
@@ -130,23 +151,23 @@ struct _ThunarPermissionsChooserClass
 
 struct _ThunarPermissionsChooser
 {
-  GtkVBox     __parent__;
+  GtkVBox __parent__;
 
-  GList      *files;
+  GList *files;
 
   /* the main grid widget, which contains everything but the job control stuff */
-  GtkWidget  *grid;
+  GtkWidget *grid;
 
-  GtkWidget  *user_label;
-  GtkWidget  *group_combo;
-  GtkWidget  *access_combos[3];
-  GtkWidget  *program_button;
-  GtkWidget  *fixperm_label;
-  GtkWidget  *fixperm_button;
+  GtkWidget *user_label;
+  GtkWidget *group_combo;
+  GtkWidget *access_combos[3];
+  GtkWidget *program_button;
+  GtkWidget *fixperm_label;
+  GtkWidget *fixperm_button;
 
   /* job control stuff */
-  ThunarJob  *job;
-  GtkWidget  *job_progress;
+  ThunarJob *job;
+  GtkWidget *job_progress;
 };
 
 
@@ -247,7 +268,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), chooser->access_combos[2]);
   gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (chooser->access_combos[2]), renderer_text, TRUE);
   gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (chooser->access_combos[2]), renderer_text, "text", 0);
-  exo_binding_new (G_OBJECT (chooser), "mutable", G_OBJECT (chooser->access_combos[2]), "sensitive");
+  g_object_bind_property (G_OBJECT (chooser), "mutable",
+                          G_OBJECT (chooser->access_combos[2]), "sensitive",
+                          G_BINDING_SYNC_CREATE);
   g_signal_connect_swapped (G_OBJECT (chooser->access_combos[2]), "changed", G_CALLBACK (thunar_permissions_chooser_access_changed), chooser);
   gtk_widget_set_hexpand (chooser->access_combos[2], TRUE);
   gtk_grid_attach (GTK_GRID (chooser->grid), chooser->access_combos[2], 1, row, 1, 1);
@@ -274,7 +297,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (chooser->group_combo), renderer_text, TRUE);
   gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (chooser->group_combo), renderer_text, "text", THUNAR_PERMISSIONS_STORE_COLUMN_NAME);
   gtk_combo_box_set_row_separator_func (GTK_COMBO_BOX (chooser->group_combo), thunar_permissions_chooser_row_separator, NULL, NULL);
-  exo_binding_new (G_OBJECT (chooser), "mutable", G_OBJECT (chooser->group_combo), "sensitive");
+  g_object_bind_property (G_OBJECT (chooser), "mutable",
+                          G_OBJECT (chooser->group_combo), "sensitive",
+                          G_BINDING_SYNC_CREATE);
   g_signal_connect_swapped (G_OBJECT (chooser->group_combo), "changed", G_CALLBACK (thunar_permissions_chooser_group_changed), chooser);
   gtk_widget_set_hexpand (chooser->group_combo, TRUE);
   gtk_grid_attach (GTK_GRID (chooser->grid), chooser->group_combo, 1, row, 1, 1);
@@ -293,7 +318,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), chooser->access_combos[1]);
   gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (chooser->access_combos[1]), renderer_text, TRUE);
   gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (chooser->access_combos[1]), renderer_text, "text", 0);
-  exo_binding_new (G_OBJECT (chooser), "mutable", G_OBJECT (chooser->access_combos[1]), "sensitive");
+  g_object_bind_property (G_OBJECT (chooser), "mutable",
+                          G_OBJECT (chooser->access_combos[1]), "sensitive",
+                          G_BINDING_SYNC_CREATE);
   g_signal_connect_swapped (G_OBJECT (chooser->access_combos[1]), "changed", G_CALLBACK (thunar_permissions_chooser_access_changed), chooser);
   gtk_widget_set_hexpand (chooser->access_combos[1], TRUE);
   gtk_grid_attach (GTK_GRID (chooser->grid), chooser->access_combos[1], 1, row, 1, 1);
@@ -327,7 +354,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), chooser->access_combos[0]);
   gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (chooser->access_combos[0]), renderer_text, TRUE);
   gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (chooser->access_combos[0]), renderer_text, "text", 0);
-  exo_binding_new (G_OBJECT (chooser), "mutable", G_OBJECT (chooser->access_combos[0]), "sensitive");
+  g_object_bind_property (G_OBJECT (chooser), "mutable",
+                          G_OBJECT (chooser->access_combos[0]), "sensitive",
+                          G_BINDING_SYNC_CREATE);
   g_signal_connect_swapped (G_OBJECT (chooser->access_combos[0]), "changed", G_CALLBACK (thunar_permissions_chooser_access_changed), chooser);
   gtk_widget_set_hexpand (chooser->access_combos[0], TRUE);
   gtk_grid_attach (GTK_GRID (chooser->grid), chooser->access_combos[0], 1, row, 1, 1);
@@ -350,8 +379,12 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   gtk_widget_show (label);
 
   chooser->program_button = gtk_check_button_new_with_mnemonic (_("Allow this file to _run as a program"));
-  exo_binding_new (G_OBJECT (chooser->program_button), "visible", G_OBJECT (label), "visible");
-  exo_binding_new (G_OBJECT (chooser), "mutable", G_OBJECT (chooser->program_button), "sensitive");
+  g_object_bind_property (G_OBJECT (chooser->program_button), "visible",
+                          G_OBJECT (label), "visible",
+                          G_BINDING_SYNC_CREATE);
+  g_object_bind_property (G_OBJECT (chooser), "mutable",
+                          G_OBJECT (chooser->program_button), "sensitive",
+                          G_BINDING_SYNC_CREATE);
   g_signal_connect_swapped (G_OBJECT (chooser->program_button), "toggled", G_CALLBACK (thunar_permissions_chooser_program_toggled), chooser);
   gtk_grid_attach (GTK_GRID (chooser->grid), chooser->program_button, 1, row, 1, 1);
   thunar_gtk_label_set_a11y_relation (GTK_LABEL (label), chooser->program_button);
@@ -360,8 +393,12 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   row += 1;
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  exo_binding_new (G_OBJECT (chooser), "mutable", G_OBJECT (hbox), "sensitive");
-  exo_binding_new (G_OBJECT (chooser->program_button), "visible", G_OBJECT (hbox), "visible");
+  g_object_bind_property (G_OBJECT (chooser), "mutable",
+                          G_OBJECT (hbox), "sensitive",
+                          G_BINDING_SYNC_CREATE);
+  g_object_bind_property (G_OBJECT (chooser->program_button), "visible",
+                          G_OBJECT (hbox), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (chooser->grid), hbox, 1, row, 1, 1);
   gtk_widget_show (hbox);
 
@@ -377,7 +414,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   gtk_widget_show (label);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  exo_binding_new (G_OBJECT (chooser), "mutable", G_OBJECT (hbox), "sensitive");
+  g_object_bind_property (G_OBJECT (chooser), "mutable",
+                          G_OBJECT (hbox), "sensitive",
+                          G_BINDING_SYNC_CREATE);
   gtk_grid_attach (GTK_GRID (chooser->grid), hbox, 1, row, 1, 1);
   gtk_widget_show (hbox);
 
@@ -389,7 +428,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   gtk_label_set_xalign (GTK_LABEL (chooser->fixperm_label), 0.0f);
   gtk_label_set_attributes (GTK_LABEL (chooser->fixperm_label), thunar_pango_attr_list_small_italic ());
   gtk_label_set_line_wrap (GTK_LABEL (chooser->fixperm_label), TRUE);
-  exo_binding_new (G_OBJECT (chooser->fixperm_label), "visible", G_OBJECT (hbox), "visible");
+  g_object_bind_property (G_OBJECT (chooser->fixperm_label), "visible",
+                          G_OBJECT (hbox), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_box_pack_start (GTK_BOX (hbox), chooser->fixperm_label, TRUE, TRUE, 0);
   gtk_widget_show (chooser->fixperm_label);
 
@@ -402,7 +443,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
   chooser->fixperm_button = gtk_button_new_with_mnemonic (_("Correct _folder permissions..."));
   gtk_widget_set_tooltip_text (chooser->fixperm_button, _("Click here to automatically fix the folder permissions."));
   g_signal_connect_swapped (G_OBJECT (chooser->fixperm_button), "clicked", G_CALLBACK (thunar_permissions_chooser_fixperm_clicked), chooser);
-  exo_binding_new (G_OBJECT (chooser->fixperm_button), "visible", G_OBJECT (hbox), "visible");
+  g_object_bind_property (G_OBJECT (chooser->fixperm_button), "visible",
+                          G_OBJECT (hbox), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_box_pack_end (GTK_BOX (hbox), chooser->fixperm_button, FALSE, FALSE, 0);
   gtk_widget_show (chooser->fixperm_button);
 
@@ -412,7 +455,9 @@ thunar_permissions_chooser_init (ThunarPermissionsChooser *chooser)
 
   chooser->job_progress = gtk_progress_bar_new ();
   gtk_progress_bar_set_text (GTK_PROGRESS_BAR (chooser->job_progress), _("Please wait..."));
-  exo_binding_new (G_OBJECT (chooser->job_progress), "visible", G_OBJECT (hbox), "visible");
+  g_object_bind_property (G_OBJECT (chooser->job_progress), "visible",
+                          G_OBJECT (hbox), "visible",
+                          G_BINDING_SYNC_CREATE);
   gtk_box_pack_start (GTK_BOX (hbox), chooser->job_progress, TRUE, TRUE, 0);
 
   button = gtk_button_new ();
@@ -436,7 +481,7 @@ thunar_permissions_chooser_finalize (GObject *object)
       exo_job_cancel (EXO_JOB (chooser->job));
 
       /* disconnect from the job */
-      g_signal_handlers_disconnect_matched (chooser->job, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, chooser);
+      g_signal_handlers_disconnect_by_data (chooser->job, chooser);
       g_object_unref (chooser->job);
       chooser->job = NULL;
     }
@@ -532,9 +577,9 @@ thunar_permissions_chooser_ask_recursive (ThunarPermissionsChooser *chooser)
       dialog = gtk_dialog_new_with_buttons (_("Question"), GTK_WINDOW (toplevel),
                                             GTK_DIALOG_DESTROY_WITH_PARENT
                                             | GTK_DIALOG_MODAL,
-                                            _("_Cancel"), GTK_RESPONSE_CANCEL,
-                                            _("_No"), GTK_RESPONSE_NO,
-                                            _("_Yes"), GTK_RESPONSE_YES,
+                                              _("_Cancel"), GTK_RESPONSE_CANCEL,
+                                                _("_No"), GTK_RESPONSE_NO,
+                                                  _("_Yes"), GTK_RESPONSE_YES,
                                             NULL);
       gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_YES);
 
@@ -700,7 +745,7 @@ thunar_permissions_chooser_change_group (ThunarPermissionsChooser *chooser,
           recursive = FALSE;
           break;
 
-        default:  /* cancelled by the user */
+        default: /* cancelled by the user */
           thunar_permissions_chooser_file_changed (chooser);
           return;
         }
@@ -709,6 +754,7 @@ thunar_permissions_chooser_change_group (ThunarPermissionsChooser *chooser,
   /* try to allocate the new job */
   file_list = thunar_permissions_chooser_get_file_list (chooser);
   job = thunar_io_jobs_change_group (file_list, gid, recursive);
+  exo_job_launch (EXO_JOB (job));
   thunar_permissions_chooser_job_start (chooser, job, recursive);
   g_list_free_full (file_list, g_object_unref);
   g_object_unref (job);
@@ -745,7 +791,7 @@ thunar_permissions_chooser_change_mode (ThunarPermissionsChooser *chooser,
           recursive = FALSE;
           break;
 
-        default:  /* cancelled by the user */
+        default: /* cancelled by the user */
           thunar_permissions_chooser_file_changed (chooser);
           return FALSE;
         }
@@ -754,6 +800,7 @@ thunar_permissions_chooser_change_mode (ThunarPermissionsChooser *chooser,
   /* try to allocate the new job */
   file_list = thunar_permissions_chooser_get_file_list (chooser);
   job = thunar_io_jobs_change_mode (file_list, dir_mask, dir_mode, file_mask, file_mode, recursive);
+  exo_job_launch (EXO_JOB (job));
   thunar_permissions_chooser_job_start (chooser, job, recursive);
   g_list_free_full (file_list, g_object_unref);
   g_object_unref (job);
@@ -767,14 +814,14 @@ static void
 thunar_permissions_chooser_access_changed (ThunarPermissionsChooser *chooser,
                                            GtkWidget                *combo)
 {
-  ThunarFileMode  file_mask;
-  ThunarFileMode  file_mode;
-  ThunarFileMode  dir_mask;
-  ThunarFileMode  dir_mode;
-  guint           n;
-  gint            active_mode;
-  GtkTreeModel   *model;
-  GtkTreeIter     iter;
+  ThunarFileMode file_mask;
+  ThunarFileMode file_mode;
+  ThunarFileMode dir_mask;
+  ThunarFileMode dir_mode;
+  guint          n;
+  gint           active_mode;
+  GtkTreeModel  *model;
+  GtkTreeIter    iter;
 
   _thunar_return_if_fail (THUNAR_IS_PERMISSIONS_CHOOSER (chooser));
   _thunar_return_if_fail (GTK_IS_COMBO_BOX (combo));
@@ -785,7 +832,8 @@ thunar_permissions_chooser_access_changed (ThunarPermissionsChooser *chooser,
     return;
 
   /* determine the new mode from the combo box */
-  for (n = 0; n < G_N_ELEMENTS (chooser->access_combos) && chooser->access_combos[n] != combo ; ++n);
+  for (n = 0; n < G_N_ELEMENTS (chooser->access_combos) && chooser->access_combos[n] != combo; ++n)
+    ;
   dir_mode = file_mode = (active_mode << 1) << (n * 3);
   dir_mask = file_mask = 0006 << (n * 3);
 
@@ -863,9 +911,11 @@ thunar_permissions_chooser_file_changed (ThunarPermissionsChooser *chooser)
   gchar              buffer[1024];
   guint              n;
   guint              n_files = 0;
-  gint               modes[3] = { 0, };
-  gint               file_modes[3];
-  GtkListStore      *access_store;
+  gint               modes[3] = {
+    0,
+  };
+  gint          file_modes[3];
+  GtkListStore *access_store;
 
   _thunar_return_if_fail (THUNAR_IS_PERMISSIONS_CHOOSER (chooser));
 
@@ -952,7 +1002,7 @@ thunar_permissions_chooser_file_changed (ThunarPermissionsChooser *chooser)
       if (G_LIKELY (user != NULL))
         {
           groups = g_list_copy (thunar_user_get_groups (user));
-          g_list_foreach (groups, (GFunc) (void (*)(void)) g_object_ref, NULL);
+          g_list_foreach (groups, (GFunc) (void (*) (void)) g_object_ref, NULL);
         }
     }
 
@@ -1140,6 +1190,7 @@ thunar_permissions_chooser_fixperm_clicked (ThunarPermissionsChooser *chooser,
                                    GTK_MESSAGE_QUESTION,
                                    GTK_BUTTONS_NONE,
                                    _("Correct folder permissions automatically?"));
+  gtk_window_set_title (GTK_WINDOW (dialog), _("Folder permissions"));
   gtk_dialog_add_button (GTK_DIALOG (dialog), _("_Cancel"), GTK_RESPONSE_CANCEL);
   gtk_dialog_add_button (GTK_DIALOG (dialog), _("Correct _folder permissions"), GTK_RESPONSE_OK);
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
@@ -1163,8 +1214,8 @@ thunar_permissions_chooser_fixperm_clicked (ThunarPermissionsChooser *chooser,
 
           /* determine the new mode (making sure the owner can read/enter the folder) */
           mode = (THUNAR_FILE_MODE_USR_READ | THUNAR_FILE_MODE_USR_EXEC)
-               | (((mode & THUNAR_FILE_MODE_GRP_READ) != 0) ? THUNAR_FILE_MODE_GRP_EXEC : 0)
-               | (((mode & THUNAR_FILE_MODE_OTH_READ) != 0) ? THUNAR_FILE_MODE_OTH_EXEC : 0);
+                 | (((mode & THUNAR_FILE_MODE_GRP_READ) != 0) ? THUNAR_FILE_MODE_GRP_EXEC : 0)
+                 | (((mode & THUNAR_FILE_MODE_OTH_READ) != 0) ? THUNAR_FILE_MODE_OTH_EXEC : 0);
 
           file_list.prev = NULL;
           file_list.data = thunar_file_get_file (THUNAR_FILE (lp->data));
@@ -1173,6 +1224,7 @@ thunar_permissions_chooser_fixperm_clicked (ThunarPermissionsChooser *chooser,
           /* try to allocate the new job */
           job = thunar_io_jobs_change_mode (&file_list,
                                             0511, mode, 0000, 0000, FALSE);
+          exo_job_launch (EXO_JOB (job));
 
           /* handle the job */
           thunar_permissions_chooser_job_start (chooser, job, FALSE);
@@ -1223,7 +1275,7 @@ thunar_permissions_chooser_job_cancel (ThunarPermissionsChooser *chooser)
   exo_job_cancel (EXO_JOB (chooser->job));
 
   /* disconnect from the job */
-  g_signal_handlers_disconnect_matched (chooser->job, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, chooser);
+  g_signal_handlers_disconnect_by_data (chooser->job, chooser);
   g_object_unref (G_OBJECT (chooser->job));
   chooser->job = NULL;
 
@@ -1257,7 +1309,7 @@ thunar_permissions_chooser_job_error (ThunarPermissionsChooser *chooser,
     return;
 
   /* popup the error message dialog */
-  thunar_dialogs_show_job_error (GTK_WINDOW (toplevel), error);
+  xfce_dialog_show_error (GTK_WINDOW (toplevel), error, _("Error while changing file permissions"));
 }
 
 
@@ -1347,7 +1399,7 @@ thunar_permissions_chooser_row_separator (GtkTreeModel *model,
  *
  * Return value: the file associated with @chooser.
  **/
-GList*
+GList *
 thunar_permissions_chooser_get_files (ThunarPermissionsChooser *chooser)
 {
   _thunar_return_val_if_fail (THUNAR_IS_PERMISSIONS_CHOOSER (chooser), NULL);
@@ -1415,7 +1467,7 @@ thunar_permissions_chooser_set_files (ThunarPermissionsChooser *chooser,
  *
  * Return value: the newly allocated #ThunarPermissionsChooser.
  **/
-GtkWidget*
+GtkWidget *
 thunar_permissions_chooser_new (void)
 {
   return g_object_new (THUNAR_TYPE_PERMISSIONS_CHOOSER, NULL);

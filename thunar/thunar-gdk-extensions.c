@@ -18,7 +18,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_ERRNO_H
@@ -34,8 +34,8 @@
 #include <string.h>
 #endif
 
-#include <thunar/thunar-gdk-extensions.h>
-#include <thunar/thunar-private.h>
+#include "thunar/thunar-gdk-extensions.h"
+#include "thunar/thunar-private.h"
 
 
 
@@ -44,7 +44,8 @@ static const cairo_user_data_key_t cairo_key;
 
 
 static cairo_surface_t *
-thunar_gdk_cairo_create_surface (const GdkPixbuf *pixbuf)
+thunar_gdk_cairo_create_surface (const GdkPixbuf *pixbuf,
+                                 gint             scale_factor)
 {
   gint             width;
   gint             height;
@@ -110,7 +111,13 @@ thunar_gdk_cairo_create_surface (const GdkPixbuf *pixbuf)
     }
   else
     {
-#define MULT(d,c,a) G_STMT_START { guint t = c * a + 0x7f; d = ((t >> 8) + t) >> 8; } G_STMT_END
+#define MULT(d, c, a) \
+  G_STMT_START \
+  { \
+    guint t = c * a + 0x7f; \
+    d = ((t >> 8) + t) >> 8; \
+  } \
+  G_STMT_END
       for (j = height; j; j--)
         {
           p = gdk_pixels;
@@ -120,15 +127,15 @@ thunar_gdk_cairo_create_surface (const GdkPixbuf *pixbuf)
           while (p < end)
             {
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
-              MULT(q[0], p[2], p[3]);
-              MULT(q[1], p[1], p[3]);
-              MULT(q[2], p[0], p[3]);
+              MULT (q[0], p[2], p[3]);
+              MULT (q[1], p[1], p[3]);
+              MULT (q[2], p[0], p[3]);
               q[3] = p[3];
 #else
               q[0] = p[3];
-              MULT(q[1], p[0], p[3]);
-              MULT(q[2], p[1], p[3]);
-              MULT(q[3], p[2], p[3]);
+              MULT (q[1], p[0], p[3]);
+              MULT (q[2], p[1], p[3]);
+              MULT (q[3], p[2], p[3]);
 #endif
 
               p += 4;
@@ -140,6 +147,8 @@ thunar_gdk_cairo_create_surface (const GdkPixbuf *pixbuf)
         }
 #undef MULT
     }
+
+  cairo_surface_set_device_scale (surface, scale_factor, scale_factor);
 
   return surface;
 }
@@ -164,7 +173,7 @@ thunar_gdk_cairo_create_surface (const GdkPixbuf *pixbuf)
  * Return value: the #GdkScreen for @display_name or %NULL if
  *               @display_name could not be opened.
  **/
-GdkScreen*
+GdkScreen *
 thunar_gdk_screen_open (const gchar *display_name,
                         GError     **error)
 {
@@ -224,10 +233,11 @@ thunar_gdk_screen_open (const gchar *display_name,
 
 /**
  * thunar_gdk_cairo_set_source_pixbuf:
- * cr       : a Cairo context
- * pixbuf   : a GdkPixbuf
- * pixbuf_x : X coordinate of location to place upper left corner of pixbuf
- * pixbuf_y : Y coordinate of location to place upper left corner of pixbuf
+ * cr           : a Cairo context
+ * pixbuf       : a GdkPixbuf
+ * pixbuf_x     : X coordinate of location to place upper left corner of pixbuf
+ * pixbuf_y     : Y coordinate of location to place upper left corner of pixbuf
+ * scale_factor : UI scaling factor
  *
  * Works like gdk_cairo_set_source_pixbuf but we try to cache the surface
  * on the pixbuf, which is efficient within Thunar because we also share
@@ -237,7 +247,8 @@ void
 thunar_gdk_cairo_set_source_pixbuf (cairo_t   *cr,
                                     GdkPixbuf *pixbuf,
                                     gdouble    pixbuf_x,
-                                    gdouble    pixbuf_y)
+                                    gdouble    pixbuf_y,
+                                    gint       scale_factor)
 {
   cairo_surface_t *surface;
   static GQuark    surface_quark = 0;
@@ -250,7 +261,7 @@ thunar_gdk_cairo_set_source_pixbuf (cairo_t   *cr,
   if (surface == NULL)
     {
       /* create a new surface */
-      surface = thunar_gdk_cairo_create_surface (pixbuf);
+      surface = thunar_gdk_cairo_create_surface (pixbuf, scale_factor);
 
       /* store the pixbuf on the pixbuf */
       g_object_set_qdata_full (G_OBJECT (pixbuf), surface_quark,

@@ -34,15 +34,19 @@
 
 
 
-static void   tex_open_terminal_menu_provider_init    (ThunarxMenuProviderIface *iface);
-static GList *tex_open_terminal_get_file_menu_items   (ThunarxMenuProvider      *provider,
-                                                       GtkWidget                *window,
-                                                       GList                    *files);
-static GList *tex_open_terminal_get_folder_menu_items (ThunarxMenuProvider      *provider,
-                                                       GtkWidget                *window,
-                                                       ThunarxFileInfo          *folder);
-static void   tex_open_terminal_activated             (ThunarxMenuItem          *item,
-                                                       GtkWidget                *window);
+static void
+tex_open_terminal_menu_provider_init (ThunarxMenuProviderIface *iface);
+static GList *
+tex_open_terminal_get_file_menu_items (ThunarxMenuProvider *provider,
+                                       GtkWidget           *window,
+                                       GList               *files);
+static GList *
+tex_open_terminal_get_folder_menu_items (ThunarxMenuProvider *provider,
+                                         GtkWidget           *window,
+                                         ThunarxFileInfo     *folder);
+static void
+tex_open_terminal_activated (ThunarxMenuItem *item,
+                             GtkWidget       *window);
 
 
 
@@ -91,7 +95,7 @@ tex_open_terminal_menu_provider_init (ThunarxMenuProviderIface *iface)
 
 
 
-static GList*
+static GList *
 tex_open_terminal_get_file_menu_items (ThunarxMenuProvider *provider,
                                        GtkWidget           *window,
                                        GList               *files)
@@ -105,7 +109,7 @@ tex_open_terminal_get_file_menu_items (ThunarxMenuProvider *provider,
 
 
 
-static GList*
+static GList *
 tex_open_terminal_get_folder_menu_items (ThunarxMenuProvider *provider,
                                          GtkWidget           *window,
                                          ThunarxFileInfo     *folder)
@@ -156,7 +160,7 @@ tex_open_terminal_activated (ThunarxMenuItem *item,
   command = g_strdup_printf ("exo-open --launch TerminalEmulator --working-directory \"%s\"", path);
 
   /* try to run the terminal command */
-  if (!xfce_spawn_command_line_on_screen (gtk_widget_get_screen (window), command, FALSE, FALSE, &error))
+  if (!xfce_spawn_command_line (NULL, command, FALSE, FALSE, TRUE, &error))
     {
       /* display an error dialog */
       xfce_dialog_show_error (GTK_WINDOW (window), error, "Failed to open terminal in folder %s.", path);

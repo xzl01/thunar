@@ -23,7 +23,6 @@
 #endif
 
 #include <exo/exo.h>
-
 #include <thunar-sbr/thunar-sbr-case-renamer.h>
 
 
@@ -37,18 +36,21 @@ enum
 
 
 
-static void   thunar_sbr_case_renamer_get_property  (GObject                    *object,
-                                                     guint                       prop_id,
-                                                     GValue                     *value,
-                                                     GParamSpec                 *pspec);
-static void   thunar_sbr_case_renamer_set_property  (GObject                    *object,
-                                                     guint                       prop_id,
-                                                     const GValue               *value,
-                                                     GParamSpec                 *pspec);
-static gchar *thunar_sbr_case_renamer_process       (ThunarxRenamer             *renamer,
-                                                     ThunarxFileInfo            *file,
-                                                     const gchar                *text,
-                                                     guint                       idx);
+static void
+thunar_sbr_case_renamer_get_property (GObject    *object,
+                                      guint       prop_id,
+                                      GValue     *value,
+                                      GParamSpec *pspec);
+static void
+thunar_sbr_case_renamer_set_property (GObject      *object,
+                                      guint         prop_id,
+                                      const GValue *value,
+                                      GParamSpec   *pspec);
+static gchar *
+thunar_sbr_case_renamer_process (ThunarxRenamer  *renamer,
+                                 ThunarxFileInfo *file,
+                                 const gchar     *text,
+                                 guint            idx);
 
 
 
@@ -122,7 +124,7 @@ thunar_sbr_case_renamer_init (ThunarSbrCaseRenamer *case_renamer)
   klass = g_type_class_ref (THUNAR_SBR_TYPE_CASE_RENAMER_MODE);
   for (n = 0; n < klass->n_values; ++n)
     gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(klass->values[n].value_nick));
-  exo_mutual_binding_new (G_OBJECT (case_renamer), "mode", G_OBJECT (combo), "active");
+  g_object_bind_property (G_OBJECT (case_renamer), "mode", G_OBJECT (combo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
   gtk_box_pack_start (GTK_BOX (hbox), combo, FALSE, FALSE, 0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), combo);
   g_type_class_unref (klass);
@@ -134,6 +136,7 @@ thunar_sbr_case_renamer_init (ThunarSbrCaseRenamer *case_renamer)
   relation = atk_relation_new (&object, 1, ATK_RELATION_LABEL_FOR);
   atk_relation_set_add (relations, relation);
   g_object_unref (G_OBJECT (relation));
+  g_object_unref (relations);
 }
 
 
@@ -182,7 +185,7 @@ thunar_sbr_case_renamer_set_property (GObject      *object,
 
 
 
-static gchar*
+static gchar *
 tscr_utf8_strcase (const gchar *text,
                    gboolean     title_case)
 {
@@ -222,7 +225,7 @@ tscr_utf8_strcase (const gchar *text,
 
 
 
-static gchar*
+static gchar *
 thunar_sbr_case_renamer_process (ThunarxRenamer  *renamer,
                                  ThunarxFileInfo *file,
                                  const gchar     *text,
@@ -241,7 +244,7 @@ thunar_sbr_case_renamer_process (ThunarxRenamer  *renamer,
     case THUNAR_SBR_CASE_RENAMER_MODE_TITLE:
       return tscr_utf8_strcase (text, TRUE);
 
-   case THUNAR_SBR_CASE_RENAMER_MODE_FIRST_UPPER:
+    case THUNAR_SBR_CASE_RENAMER_MODE_FIRST_UPPER:
       return tscr_utf8_strcase (text, FALSE);
 
     default:
@@ -259,7 +262,7 @@ thunar_sbr_case_renamer_process (ThunarxRenamer  *renamer,
  *
  * Return value: the newly allocated #ThunarSbrCaseRenamer.
  **/
-ThunarSbrCaseRenamer*
+ThunarSbrCaseRenamer *
 thunar_sbr_case_renamer_new (void)
 {
   return g_object_new (THUNAR_SBR_TYPE_CASE_RENAMER,
@@ -314,5 +317,3 @@ thunar_sbr_case_renamer_set_mode (ThunarSbrCaseRenamer    *case_renamer,
   /* emit the "changed" signal */
   thunarx_renamer_changed (THUNARX_RENAMER (case_renamer));
 }
-
-

@@ -19,17 +19,19 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
+#include "thunarx/thunarx-private.h"
+#include "thunarx/thunarx-provider-plugin.h"
+
 #include <glib/gi18n-lib.h>
-
-#include <thunarx/thunarx-private.h>
-#include <thunarx/thunarx-provider-plugin.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
-static void thunarx_provider_plugin_class_init (gpointer klass);
+static void
+thunarx_provider_plugin_class_init (gpointer klass);
 
 /**
  * SECTION: thunarx-provider-plugin
@@ -45,23 +47,23 @@ static void thunarx_provider_plugin_class_init (gpointer klass);
 GType
 thunarx_provider_plugin_get_type (void)
 {
-  static volatile gsize type__volatile = 0;
-  GType                 type;
+  static gsize type__static = 0;
+  GType        type;
 
-  if (g_once_init_enter (&type__volatile))
+  if (g_once_init_enter (&type__static))
     {
       type = g_type_register_static_simple (G_TYPE_INTERFACE,
-                                            I_("ThunarxProviderPlugin"),
+                                            I_ ("ThunarxProviderPlugin"),
                                             sizeof (ThunarxProviderPluginIface),
-                                            (GClassInitFunc) (void (*)(void)) thunarx_provider_plugin_class_init,
+                                            (GClassInitFunc) (void (*) (void)) thunarx_provider_plugin_class_init,
                                             0,
                                             NULL,
                                             0);
 
-      g_once_init_leave (&type__volatile, type);
+      g_once_init_leave (&type__static, type);
     }
 
-  return type__volatile;
+  return type__static;
 }
 
 
@@ -79,7 +81,7 @@ thunarx_provider_plugin_class_init (gpointer klass)
   g_object_interface_install_property (klass,
                                        g_param_spec_boolean ("resident",
                                                              _("Resident"),
-                                                             _("Don't unload the plugin from memory"),
+                                                               _("Don't unload the plugin from memory"),
                                                              FALSE,
                                                              G_PARAM_READWRITE));
 }

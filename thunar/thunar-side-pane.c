@@ -18,30 +18,33 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-side-pane.h>
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-side-pane.h"
+
+#include <libxfce4util/libxfce4util.h>
 
 
 
-static void thunar_side_pane_class_init (gpointer klass);
+static void
+thunar_side_pane_class_init (gpointer klass);
 
 
 
 GType
 thunar_side_pane_get_type (void)
 {
-  static volatile gsize type__volatile = 0;
-  GType                 type;
+  static gsize type__static = 0;
+  GType        type;
 
-  if (g_once_init_enter (&type__volatile))
+  if (g_once_init_enter (&type__static))
     {
       type = g_type_register_static_simple (G_TYPE_INTERFACE,
-                                            I_("ThunarSidePane"),
+                                            I_ ("ThunarSidePane"),
                                             sizeof (ThunarSidePaneIface),
-                                            (GClassInitFunc) (void (*)(void)) thunar_side_pane_class_init,
+                                            (GClassInitFunc) (void (*) (void)) thunar_side_pane_class_init,
                                             0,
                                             NULL,
                                             0);
@@ -49,10 +52,10 @@ thunar_side_pane_get_type (void)
       g_type_interface_add_prerequisite (type, GTK_TYPE_WIDGET);
       g_type_interface_add_prerequisite (type, THUNAR_TYPE_COMPONENT);
 
-      g_once_init_leave (&type__volatile, type);
+      g_once_init_leave (&type__static, type);
     }
 
-  return type__volatile;
+  return type__static;
 }
 
 
@@ -90,7 +93,10 @@ gboolean
 thunar_side_pane_get_show_hidden (ThunarSidePane *side_pane)
 {
   _thunar_return_val_if_fail (THUNAR_IS_SIDE_PANE (side_pane), FALSE);
-  return (*THUNAR_SIDE_PANE_GET_IFACE (side_pane)->get_show_hidden) (side_pane);
+  if (THUNAR_SIDE_PANE_GET_IFACE (side_pane)->get_show_hidden != NULL)
+    return (*THUNAR_SIDE_PANE_GET_IFACE (side_pane)->get_show_hidden) (side_pane);
+
+  return FALSE;
 }
 
 
@@ -108,6 +114,6 @@ thunar_side_pane_set_show_hidden (ThunarSidePane *side_pane,
                                   gboolean        show_hidden)
 {
   _thunar_return_if_fail (THUNAR_IS_SIDE_PANE (side_pane));
-  (*THUNAR_SIDE_PANE_GET_IFACE (side_pane)->set_show_hidden) (side_pane, show_hidden);
+  if (THUNAR_SIDE_PANE_GET_IFACE (side_pane)->set_show_hidden != NULL)
+    (*THUNAR_SIDE_PANE_GET_IFACE (side_pane)->set_show_hidden) (side_pane, show_hidden);
 }
-

@@ -19,17 +19,16 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <glib.h>
-#include <glib-object.h>
+#include "thunar/thunar-application.h"
+#include "thunar/thunar-icon-factory.h"
+#include "thunar/thunar-image.h"
+#include "thunar/thunar-private.h"
 
-#include <thunar/thunar-application.h>
-#include <thunar/thunar-file-monitor.h>
-#include <thunar/thunar-image.h>
-#include <thunar/thunar-icon-factory.h>
-#include <thunar/thunar-private.h>
+#include <glib-object.h>
+#include <glib.h>
 
 
 
@@ -42,18 +41,27 @@ enum
 
 
 
-static void thunar_image_finalize             (GObject           *object);
-static void thunar_image_get_property         (GObject           *object,
-                                               guint              prop_id,
-                                               GValue            *value,
-                                               GParamSpec        *pspec);
-static void thunar_image_set_property         (GObject           *object,
-                                               guint              prop_id,
-                                               const GValue      *value,
-                                               GParamSpec        *pspec);
-static void thunar_image_file_changed         (ThunarFileMonitor *monitor,
-                                               ThunarFile        *file,
-                                               ThunarImage       *image);
+static void
+thunar_image_finalize (GObject *object);
+static void
+thunar_image_get_property (GObject    *object,
+                           guint       prop_id,
+                           GValue     *value,
+                           GParamSpec *pspec);
+static void
+thunar_image_set_property (GObject      *object,
+                           guint         prop_id,
+                           const GValue *value,
+                           GParamSpec   *pspec);
+static void
+thunar_image_scale_changed (GObject    *object,
+                            GParamSpec *pspec,
+                            gpointer    user_data);
+static void
+thunar_image_file_changed (ThunarFile  *file,
+                           ThunarImage *image);
+static void
+thunar_image_update (ThunarImage *image);
 
 
 
@@ -71,8 +79,7 @@ struct _ThunarImage
 
 struct _ThunarImagePrivate
 {
-  ThunarFileMonitor *monitor;
-  ThunarFile        *file;
+  ThunarFile *file;
 };
 
 
@@ -107,9 +114,7 @@ thunar_image_init (ThunarImage *image)
   image->priv = thunar_image_get_instance_private (image);
   image->priv->file = NULL;
 
-  image->priv->monitor = thunar_file_monitor_get_default ();
-  g_signal_connect (image->priv->monitor, "file-changed",
-                    G_CALLBACK (thunar_image_file_changed), image);
+  g_signal_connect (G_OBJECT (image), "notify::scale-factor", G_CALLBACK (thunar_image_scale_changed), NULL);
 }
 
 
@@ -118,10 +123,6 @@ static void
 thunar_image_finalize (GObject *object)
 {
   ThunarImage *image = THUNAR_IMAGE (object);
-
-  g_signal_handlers_disconnect_by_func (image->priv->monitor,
-                                        thunar_image_file_changed, image);
-  g_object_unref (image->priv->monitor);
 
   thunar_image_set_file (image, NULL);
 
@@ -173,12 +174,24 @@ thunar_image_set_property (GObject      *object,
 
 
 static void
+thunar_image_scale_changed (GObject    *object,
+                            GParamSpec *pspec,
+                            gpointer    user_data)
+{
+  thunar_image_update (THUNAR_IMAGE (object));
+}
+
+
+
+static void
 thunar_image_update (ThunarImage *image)
 {
   ThunarIconFactory *icon_factory;
   GtkIconTheme      *icon_theme;
   GdkPixbuf         *icon;
   GdkScreen         *screen;
+  gint               scale_factor;
+  cairo_surface_t   *surface;
 
   _thunar_return_if_fail (THUNAR_IS_IMAGE (image));
 
@@ -188,28 +201,30 @@ thunar_image_update (ThunarImage *image)
       icon_theme = gtk_icon_theme_get_for_screen (screen);
       icon_factory = thunar_icon_factory_get_for_icon_theme (icon_theme);
 
+      scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (image));
       icon = thunar_icon_factory_load_file_icon (icon_factory, image->priv->file,
-                                                 THUNAR_FILE_ICON_STATE_DEFAULT, 48);
+                                                 THUNAR_FILE_ICON_STATE_DEFAULT, 48,
+                                                 scale_factor, FALSE, NULL);
 
-      gtk_image_set_from_pixbuf (GTK_IMAGE (image), icon);
+      surface = gdk_cairo_surface_create_from_pixbuf (icon, scale_factor, gtk_widget_get_window (GTK_WIDGET (image)));
+      gtk_image_set_from_surface (GTK_IMAGE (image), surface);
 
       g_object_unref (icon_factory);
+      g_object_unref (icon);
+      cairo_surface_destroy (surface);
     }
 }
 
 
 
 static void
-thunar_image_file_changed (ThunarFileMonitor *monitor,
-                           ThunarFile        *file,
-                           ThunarImage       *image)
+thunar_image_file_changed (ThunarFile  *file,
+                           ThunarImage *image)
 {
-  _thunar_return_if_fail (THUNAR_IS_FILE_MONITOR (monitor));
   _thunar_return_if_fail (THUNAR_IS_FILE (file));
   _thunar_return_if_fail (THUNAR_IS_IMAGE (image));
 
-  if (file == image->priv->file)
-    thunar_image_update (image);
+  thunar_image_update (image);
 }
 
 
@@ -233,13 +248,26 @@ thunar_image_set_file (ThunarImage *image,
       if (image->priv->file == file)
         return;
 
+      /* disable monitoring for the file and unsubscribe from changes */
+      thunar_file_unwatch (image->priv->file);
+      g_signal_handlers_disconnect_by_data (image->priv->file, image);
+
       g_object_unref (image->priv->file);
     }
 
   if (file != NULL)
-    image->priv->file = g_object_ref (file);
+    {
+      image->priv->file = g_object_ref (file);
+
+      /* enable monitoring for the file and subscribe to changes */
+      thunar_file_watch (file);
+      g_signal_connect (G_OBJECT (file), "changed", G_CALLBACK (thunar_image_file_changed), image);
+    }
   else
-    image->priv->file = NULL;
+    {
+      image->priv->file = NULL;
+    }
+
 
   thunar_image_update (image);
 

@@ -18,15 +18,13 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-renamer-pair.h>
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-renamer-pair.h"
 
-
-
-static ThunarRenamerPair *thunar_renamer_pair_copy (ThunarRenamerPair *renamer_pair) G_GNUC_MALLOC;
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -37,7 +35,7 @@ thunar_renamer_pair_get_type (void)
 
   if (G_UNLIKELY (type == G_TYPE_INVALID))
     {
-      type = g_boxed_type_register_static (I_("ThunarRenamerPair"),
+      type = g_boxed_type_register_static (I_ ("ThunarRenamerPair"),
                                            (GBoxedCopyFunc) thunar_renamer_pair_copy,
                                            (GBoxedFreeFunc) thunar_renamer_pair_free);
     }
@@ -61,7 +59,7 @@ thunar_renamer_pair_get_type (void)
  *
  * Return value: the newly allocated #ThunarRenamerPair.
  **/
-ThunarRenamerPair*
+ThunarRenamerPair *
 thunar_renamer_pair_new (ThunarFile  *file,
                          const gchar *name)
 {
@@ -91,7 +89,7 @@ thunar_renamer_pair_new (ThunarFile  *file,
  *
  * Return value: the newly allocated copy of @renamer_pair.
  **/
-static ThunarRenamerPair*
+ThunarRenamerPair *
 thunar_renamer_pair_copy (ThunarRenamerPair *renamer_pair)
 {
   _thunar_return_val_if_fail (renamer_pair != NULL, NULL);
@@ -131,7 +129,7 @@ thunar_renamer_pair_free (gpointer data)
  *
  * Return value: a deep copy of @renamer_pair_list.
  **/
-GList*
+GList *
 thunar_renamer_pair_list_copy (GList *renamer_pair_list)
 {
   GList *result = NULL;
@@ -159,3 +157,49 @@ thunar_renamer_pair_list_free (GList *renamer_pair_list)
 }
 
 
+
+/**
+ * thunar_renamer_pair_compare_ascending
+ * @pair_a : first pair
+ * @pair_b : second pair
+ *
+ * Based on GCompareFunc
+ * This function can be used as a comparator to sort a #Glist of
+ * #ThunarRenamerPair in ascending order of their name.
+ **/
+int
+thunar_renamer_pair_compare_ascending (const void *pair_a,
+                                       const void *pair_b)
+{
+  ThunarRenamerPair *a, *b;
+  ThunarFile        *file_a, *file_b;
+  a = (ThunarRenamerPair *) pair_a;
+  b = (ThunarRenamerPair *) pair_b;
+  file_a = a->file;
+  file_b = b->file;
+  return thunar_file_compare_by_name (file_a, file_b, TRUE);
+}
+
+
+
+/**
+ * thunar_renamer_pair_compare_descending
+ * @pair_a : first pair
+ * @pair_b : second pair
+ *
+ * Based on GCompareFunc
+ * This function can be used as a comparator to sort a #Glist of
+ * #ThunarRenamerPair in descending order of their name.
+ **/
+int
+thunar_renamer_pair_compare_descending (const void *pair_a,
+                                        const void *pair_b)
+{
+  ThunarRenamerPair *a, *b;
+  ThunarFile        *file_a, *file_b;
+  a = (ThunarRenamerPair *) pair_a;
+  b = (ThunarRenamerPair *) pair_b;
+  file_a = a->file;
+  file_b = b->file;
+  return -1 * thunar_file_compare_by_name (file_a, file_b, TRUE);
+}

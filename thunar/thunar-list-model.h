@@ -20,50 +20,29 @@
 #ifndef __THUNAR_LIST_MODEL_H__
 #define __THUNAR_LIST_MODEL_H__
 
-#include <thunar/thunar-folder.h>
+#include "thunar/thunar-standard-view-model.h"
 
 G_BEGIN_DECLS;
 
 typedef struct _ThunarListModelClass ThunarListModelClass;
 typedef struct _ThunarListModel      ThunarListModel;
 
-#define THUNAR_TYPE_LIST_MODEL            (thunar_list_model_get_type ())
-#define THUNAR_LIST_MODEL(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), THUNAR_TYPE_LIST_MODEL, ThunarListModel))
-#define THUNAR_LIST_MODEL_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), THUNAR_TYPE_LIST_MODEL, ThunarListModelClass))
-#define THUNAR_IS_LIST_MODEL(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), THUNAR_TYPE_LIST_MODEL))
+#define THUNAR_TYPE_LIST_MODEL (thunar_list_model_get_type ())
+#define THUNAR_LIST_MODEL(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), THUNAR_TYPE_LIST_MODEL, ThunarListModel))
+#define THUNAR_LIST_MODEL_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), THUNAR_TYPE_LIST_MODEL, ThunarListModelClass))
+#define THUNAR_IS_LIST_MODEL(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), THUNAR_TYPE_LIST_MODEL))
 #define THUNAR_IS_LIST_MODEL_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), THUNAR_TYPE_LIST_MODEL))
-#define THUNAR_LIST_MODEL_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), THUNAR_TYPE_LIST_MODEL, ThunarListModelClass))
+#define THUNAR_LIST_MODEL_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), THUNAR_TYPE_LIST_MODEL, ThunarListModelClass))
 
-GType            thunar_list_model_get_type               (void) G_GNUC_CONST;
+GType
+thunar_list_model_get_type (void) G_GNUC_CONST;
 
-ThunarListModel *thunar_list_model_new                    (void);
+ThunarStandardViewModel *
+thunar_list_model_new (void);
 
-ThunarFolder    *thunar_list_model_get_folder             (ThunarListModel  *store);
-void             thunar_list_model_set_folder             (ThunarListModel  *store,
-                                                           ThunarFolder     *folder);
+void
+thunar_list_model_check_file_in_model_before_use (ThunarListModel *model);
 
-void             thunar_list_model_set_folders_first      (ThunarListModel  *store,
-                                                           gboolean          folders_first);
-
-gboolean         thunar_list_model_get_show_hidden        (ThunarListModel  *store);
-void             thunar_list_model_set_show_hidden        (ThunarListModel  *store,
-                                                           gboolean          show_hidden);
-
-gboolean         thunar_list_model_get_file_size_binary   (ThunarListModel  *store);
-void             thunar_list_model_set_file_size_binary   (ThunarListModel  *store,
-                                                           gboolean          file_size_binary);
-
-ThunarFile      *thunar_list_model_get_file               (ThunarListModel  *store,
-                                                           GtkTreeIter      *iter);
-
-
-GList           *thunar_list_model_get_paths_for_files    (ThunarListModel  *store,
-                                                           GList            *files);
-GList           *thunar_list_model_get_paths_for_pattern  (ThunarListModel  *store,
-                                                           const gchar      *pattern);
-
-gchar           *thunar_list_model_get_statusbar_text     (ThunarListModel  *store,
-                                                           GList            *selected_items);
 
 G_END_DECLS;
 

@@ -18,38 +18,45 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <exo/exo.h>
+#include "thunar/thunar-abstract-dialog.h"
+#include "thunar/thunar-column-editor.h"
+#include "thunar/thunar-dialogs.h"
+#include "thunar/thunar-gtk-extensions.h"
+#include "thunar/thunar-pango-extensions.h"
+#include "thunar/thunar-preferences.h"
+#include "thunar/thunar-private.h"
 
+#include <exo/exo.h>
 #include <libxfce4ui/libxfce4ui.h>
 
-#include <thunar/thunar-abstract-dialog.h>
-#include <thunar/thunar-column-editor.h>
-#include <thunar/thunar-dialogs.h>
-#include <thunar/thunar-gtk-extensions.h>
-#include <thunar/thunar-pango-extensions.h>
-#include <thunar/thunar-preferences.h>
-#include <thunar/thunar-private.h>
 
 
-
-static void thunar_column_editor_finalize           (GObject                  *object);
-static void thunar_column_editor_help_clicked       (GtkWidget                *button,
-                                                     ThunarColumnEditor       *column_editor);
-static void thunar_column_editor_move_down          (GtkWidget                *button,
-                                                     ThunarColumnEditor       *column_editor);
-static void thunar_column_editor_move_up            (GtkWidget                *button,
-                                                     ThunarColumnEditor       *column_editor);
-static void thunar_column_editor_toggled            (GtkCellRendererToggle    *cell_renderer,
-                                                     const gchar              *path_string,
-                                                     ThunarColumnEditor       *column_editor);
-static void thunar_column_editor_toggle_visibility  (GtkWidget                *button,
-                                                     ThunarColumnEditor       *column_editor);
-static void thunar_column_editor_update_buttons     (ThunarColumnEditor       *column_editor);
-static void thunar_column_editor_use_defaults       (GtkWidget                *button,
-                                                     ThunarColumnEditor       *column_editor);
+static void
+thunar_column_editor_finalize (GObject *object);
+static void
+thunar_column_editor_help_clicked (ThunarColumnEditor *column_editor,
+                                   GtkWidget          *button);
+static void
+thunar_column_editor_move_down (ThunarColumnEditor *column_editor,
+                                GtkWidget          *button);
+static void
+thunar_column_editor_move_up (ThunarColumnEditor *column_editor,
+                              GtkWidget          *button);
+static void
+thunar_column_editor_toggled (ThunarColumnEditor    *column_editor,
+                              const gchar           *path_string,
+                              GtkCellRendererToggle *cell_renderer);
+static void
+thunar_column_editor_toggle_visibility (ThunarColumnEditor *column_editor,
+                                        GtkWidget          *button);
+static void
+thunar_column_editor_update_buttons (ThunarColumnEditor *column_editor);
+static void
+thunar_column_editor_use_defaults (ThunarColumnEditor *column_editor,
+                                   GtkWidget          *button);
 
 
 
@@ -66,11 +73,11 @@ struct _ThunarColumnEditor
 
   ThunarColumnModel *column_model;
 
-  GtkWidget         *tree_view;
-  GtkWidget         *up_button;
-  GtkWidget         *down_button;
-  GtkWidget         *show_button;
-  GtkWidget         *hide_button;
+  GtkWidget *tree_view;
+  GtkWidget *up_button;
+  GtkWidget *down_button;
+  GtkWidget *show_button;
+  GtkWidget *hide_button;
 };
 
 
@@ -99,12 +106,15 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
   GtkTreeIter        iter;
   GtkWidget         *separator;
   GtkWidget         *button;
+  GtkWidget         *combo;
   GtkWidget         *frame;
   GtkWidget         *image;
   GtkWidget         *label;
   GtkWidget         *grid;
   GtkWidget         *vbox;
   GtkWidget         *swin;
+  GEnumClass        *enum_class;
+  gint               row = 0;
 
   /* grab a reference on the preferences */
   column_editor->preferences = thunar_preferences_get ();
@@ -124,7 +134,7 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
 
   /* add the "Help" button */
   button = gtk_button_new_with_mnemonic (_("_Help"));
-  g_signal_connect (G_OBJECT (button), "clicked", G_CALLBACK (thunar_column_editor_help_clicked), column_editor);
+  g_signal_connect_swapped (G_OBJECT (button), "clicked", G_CALLBACK (thunar_column_editor_help_clicked), column_editor);
   gtk_box_pack_start (GTK_BOX (exo_gtk_dialog_get_action_area (GTK_DIALOG (column_editor))), button, FALSE, FALSE, 0);
   gtk_button_box_set_child_secondary (GTK_BUTTON_BOX (exo_gtk_dialog_get_action_area (GTK_DIALOG (column_editor))), button, TRUE);
   gtk_widget_show (button);
@@ -154,8 +164,11 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
   label = gtk_label_new (_("Choose the order of information to appear in the\ndetailed list view."));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
   gtk_widget_set_hexpand (label, TRUE);
-  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 2, 1);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 2, 1);
   gtk_widget_show (label);
+
+  /* next row */
+  row++;
 
   /* create the scrolled window for the tree view */
   swin = gtk_scrolled_window_new (NULL, NULL);
@@ -163,20 +176,20 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (swin), GTK_SHADOW_IN);
   gtk_widget_set_hexpand (swin, TRUE);
   gtk_widget_set_vexpand (swin, TRUE);
-  gtk_grid_attach (GTK_GRID (grid), swin, 0, 1, 1, 6);
+  gtk_grid_attach (GTK_GRID (grid), swin, 0, row, 1, 6);
   gtk_widget_show (swin);
 
   /* create the tree view */
-  column_editor->tree_view = gtk_tree_view_new ();
+  column_editor->tree_view = gtk_tree_view_new_with_model (GTK_TREE_MODEL (column_editor->column_model));
   gtk_tree_view_set_headers_visible (GTK_TREE_VIEW (column_editor->tree_view), FALSE);
-  gtk_tree_view_set_model (GTK_TREE_VIEW (column_editor->tree_view), GTK_TREE_MODEL (column_editor->column_model));
+  gtk_tree_view_set_tooltip_column (GTK_TREE_VIEW (column_editor->tree_view), THUNAR_COLUMN_MODEL_COLUMN_TOOLTIP);
   gtk_container_add (GTK_CONTAINER (swin), column_editor->tree_view);
   gtk_widget_show (column_editor->tree_view);
 
   /* append the toggle column */
   column = gtk_tree_view_column_new ();
   renderer = gtk_cell_renderer_toggle_new ();
-  g_signal_connect (G_OBJECT (renderer), "toggled", G_CALLBACK (thunar_column_editor_toggled), column_editor);
+  g_signal_connect_swapped (G_OBJECT (renderer), "toggled", G_CALLBACK (thunar_column_editor_toggled), column_editor);
   gtk_tree_view_column_pack_start (column, renderer, FALSE);
   gtk_tree_view_column_set_attributes (column, renderer,
                                        "active", THUNAR_COLUMN_MODEL_COLUMN_VISIBLE,
@@ -196,8 +209,8 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
 
   /* create the "Move Up" button */
   column_editor->up_button = gtk_button_new_with_mnemonic (_("Move _Up"));
-  g_signal_connect (G_OBJECT (column_editor->up_button), "clicked", G_CALLBACK (thunar_column_editor_move_up), column_editor);
-  gtk_grid_attach (GTK_GRID (grid), column_editor->up_button, 1, 1, 1, 1);
+  g_signal_connect_swapped (G_OBJECT (column_editor->up_button), "clicked", G_CALLBACK (thunar_column_editor_move_up), column_editor);
+  gtk_grid_attach (GTK_GRID (grid), column_editor->up_button, 1, row, 1, 1);
   gtk_widget_show (column_editor->up_button);
 
   image = gtk_image_new_from_icon_name ("go-up-symbolic", GTK_ICON_SIZE_BUTTON);
@@ -205,10 +218,13 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
   gtk_button_set_image (GTK_BUTTON (column_editor->up_button), image);
   gtk_widget_show (image);
 
+  /* next row */
+  row++;
+
   /* create the "Move Down" button */
   column_editor->down_button = gtk_button_new_with_mnemonic (_("Move Dow_n"));
-  g_signal_connect (G_OBJECT (column_editor->down_button), "clicked", G_CALLBACK (thunar_column_editor_move_down), column_editor);
-  gtk_grid_attach (GTK_GRID (grid), column_editor->down_button, 1, 2, 1, 1);
+  g_signal_connect_swapped (G_OBJECT (column_editor->down_button), "clicked", G_CALLBACK (thunar_column_editor_move_down), column_editor);
+  gtk_grid_attach (GTK_GRID (grid), column_editor->down_button, 1, row, 1, 1);
   gtk_widget_show (column_editor->down_button);
 
   image = gtk_image_new_from_icon_name ("go-down-symbolic", GTK_ICON_SIZE_BUTTON);
@@ -216,27 +232,39 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
   gtk_button_set_image (GTK_BUTTON (column_editor->down_button), image);
   gtk_widget_show (image);
 
+  /* next row */
+  row++;
+
   /* create the "Show" button */
   column_editor->show_button = gtk_button_new_with_mnemonic (_("_Show"));
-  g_signal_connect (G_OBJECT (column_editor->show_button), "clicked", G_CALLBACK (thunar_column_editor_toggle_visibility), column_editor);
-  gtk_grid_attach (GTK_GRID (grid), column_editor->show_button, 1, 3, 1, 1);
+  g_signal_connect_swapped (G_OBJECT (column_editor->show_button), "clicked", G_CALLBACK (thunar_column_editor_toggle_visibility), column_editor);
+  gtk_grid_attach (GTK_GRID (grid), column_editor->show_button, 1, row, 1, 1);
   gtk_widget_show (column_editor->show_button);
+
+  /* next row */
+  row++;
 
   /* create the "Hide" button */
   column_editor->hide_button = gtk_button_new_with_mnemonic (_("Hi_de"));
-  g_signal_connect (G_OBJECT (column_editor->hide_button), "clicked", G_CALLBACK (thunar_column_editor_toggle_visibility), column_editor);
-  gtk_grid_attach (GTK_GRID (grid), column_editor->hide_button, 1, 4, 1, 1);
+  g_signal_connect_swapped (G_OBJECT (column_editor->hide_button), "clicked", G_CALLBACK (thunar_column_editor_toggle_visibility), column_editor);
+  gtk_grid_attach (GTK_GRID (grid), column_editor->hide_button, 1, row, 1, 1);
   gtk_widget_show (column_editor->hide_button);
+
+  /* next row */
+  row++;
 
   /* create the horiz separator */
   separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
-  gtk_grid_attach (GTK_GRID (grid), separator, 1, 5, 1, 1);
+  gtk_grid_attach (GTK_GRID (grid), separator, 1, row, 1, 1);
   gtk_widget_show (separator);
+
+  /* next row */
+  row++;
 
   /* create the "Use Default" button */
   button = gtk_button_new_with_mnemonic (_("Use De_fault"));
-  g_signal_connect (G_OBJECT (button), "clicked", G_CALLBACK (thunar_column_editor_use_defaults), column_editor);
-  gtk_grid_attach (GTK_GRID (grid), button, 1, 6, 1, 1);
+  g_signal_connect_swapped (G_OBJECT (button), "clicked", G_CALLBACK (thunar_column_editor_use_defaults), column_editor);
+  gtk_grid_attach (GTK_GRID (grid), button, 1, row, 1, 1);
   gtk_widget_show (button);
 
   frame = g_object_new (GTK_TYPE_FRAME, "border-width", 0, "shadow-type", GTK_SHADOW_NONE, NULL);
@@ -247,6 +275,9 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
   gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
   gtk_frame_set_label_widget (GTK_FRAME (frame), label);
   gtk_widget_show (label);
+
+  /* new grid */
+  row = 0;
 
   grid = gtk_grid_new ();
   gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
@@ -261,15 +292,65 @@ thunar_column_editor_init (ThunarColumnEditor *column_editor)
                            "able this behavior below the file manager will always\n"
                            "use the user defined column widths."));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
+
+  /* next row */
+  row++;
 
   /* create the "Automatically expand columns as needed" button */
   button = gtk_check_button_new_with_mnemonic (_("Automatically _expand columns as needed"));
-  exo_mutual_binding_new_with_negation (G_OBJECT (column_editor->preferences), "last-details-view-fixed-columns", G_OBJECT (button), "active");
-  gtk_grid_attach (GTK_GRID (grid), button, 0, 1, 1, 1);
+  g_object_bind_property (G_OBJECT (column_editor->preferences),
+                          "last-details-view-fixed-columns",
+                          G_OBJECT (button),
+                          "active",
+                          G_BINDING_INVERT_BOOLEAN | G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+  gtk_grid_attach (GTK_GRID (grid), button, 0, row, 1, 1);
   thunar_gtk_label_set_a11y_relation (GTK_LABEL (label), button);
   gtk_widget_show (button);
+
+  frame = g_object_new (GTK_TYPE_FRAME, "border-width", 0, "shadow-type", GTK_SHADOW_NONE, NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, TRUE, 0);
+  gtk_widget_show (frame);
+
+  label = gtk_label_new (_("Size Column of Folders"));
+  gtk_label_set_attributes (GTK_LABEL (label), thunar_pango_attr_list_bold ());
+  gtk_frame_set_label_widget (GTK_FRAME (frame), label);
+  gtk_widget_show (label);
+
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_container_set_border_width (GTK_CONTAINER (grid), 12);
+  gtk_container_add (GTK_CONTAINER (frame), grid);
+  gtk_widget_show (grid);
+
+  /* explain what it does */
+  label = gtk_label_new (_("Show number of containing items"));
+  gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
+  gtk_widget_show (label);
+
+  combo = gtk_combo_box_text_new ();
+  enum_class = g_type_class_ref (THUNAR_TYPE_FOLDER_ITEM_COUNT);
+
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(g_enum_get_value (enum_class, THUNAR_FOLDER_ITEM_COUNT_NEVER)->value_nick));
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(g_enum_get_value (enum_class, THUNAR_FOLDER_ITEM_COUNT_ONLY_LOCAL)->value_nick));
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), _(g_enum_get_value (enum_class, THUNAR_FOLDER_ITEM_COUNT_ALWAYS)->value_nick));
+  g_type_class_unref (enum_class);
+
+  g_object_bind_property_full (G_OBJECT (column_editor->preferences), "misc-folder-item-count",
+                               G_OBJECT (combo), "active",
+                               G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE,
+                               transform_enum_value_to_index,
+                               transform_index_to_enum_value,
+                               (gpointer) thunar_folder_item_count_get_type, NULL);
+
+  gtk_widget_set_hexpand (combo, TRUE);
+  gtk_grid_attach (GTK_GRID (grid), combo, 1, row - 1, 1, 1);
+  thunar_gtk_label_set_a11y_relation (GTK_LABEL (label), combo);
+  gtk_label_set_mnemonic_widget (GTK_LABEL (label), combo);
+  gtk_widget_show (combo);
 
   /* setup the tree selection */
   selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (column_editor->tree_view));
@@ -291,7 +372,7 @@ thunar_column_editor_finalize (GObject *object)
   ThunarColumnEditor *column_editor = THUNAR_COLUMN_EDITOR (object);
 
   /* release our reference on the shared column model */
-  g_signal_handlers_disconnect_matched (G_OBJECT (column_editor->column_model), G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, column_editor);
+  g_signal_handlers_disconnect_by_data (G_OBJECT (column_editor->column_model), column_editor);
   g_object_unref (G_OBJECT (column_editor->column_model));
 
   /* release our reference on the preferences */
@@ -303,8 +384,8 @@ thunar_column_editor_finalize (GObject *object)
 
 
 static void
-thunar_column_editor_help_clicked (GtkWidget          *button,
-                                   ThunarColumnEditor *column_editor)
+thunar_column_editor_help_clicked (ThunarColumnEditor *column_editor,
+                                   GtkWidget          *button)
 {
   _thunar_return_if_fail (THUNAR_IS_COLUMN_EDITOR (column_editor));
   _thunar_return_if_fail (GTK_IS_BUTTON (button));
@@ -319,8 +400,8 @@ thunar_column_editor_help_clicked (GtkWidget          *button,
 
 
 static void
-thunar_column_editor_move_down (GtkWidget          *button,
-                                ThunarColumnEditor *column_editor)
+thunar_column_editor_move_down (ThunarColumnEditor *column_editor,
+                                GtkWidget          *button)
 {
   GtkTreeSelection *selection;
   GtkTreeModel     *model;
@@ -346,8 +427,8 @@ thunar_column_editor_move_down (GtkWidget          *button,
 
 
 static void
-thunar_column_editor_move_up (GtkWidget          *button,
-                              ThunarColumnEditor *column_editor)
+thunar_column_editor_move_up (ThunarColumnEditor *column_editor,
+                              GtkWidget          *button)
 {
   GtkTreeSelection *selection;
   GtkTreeModel     *model;
@@ -382,9 +463,9 @@ thunar_column_editor_move_up (GtkWidget          *button,
 
 
 static void
-thunar_column_editor_toggled (GtkCellRendererToggle *cell_renderer,
+thunar_column_editor_toggled (ThunarColumnEditor    *column_editor,
                               const gchar           *path_string,
-                              ThunarColumnEditor    *column_editor)
+                              GtkCellRendererToggle *cell_renderer)
 {
   ThunarColumn column;
   GtkTreePath *path;
@@ -414,8 +495,8 @@ thunar_column_editor_toggled (GtkCellRendererToggle *cell_renderer,
 
 
 static void
-thunar_column_editor_toggle_visibility (GtkWidget          *button,
-                                        ThunarColumnEditor *column_editor)
+thunar_column_editor_toggle_visibility (ThunarColumnEditor *column_editor,
+                                        GtkWidget          *button)
 {
   GtkTreeSelection *selection;
   ThunarColumn      column;
@@ -449,9 +530,9 @@ thunar_column_editor_update_buttons (ThunarColumnEditor *column_editor)
   GtkTreeModel     *model;
   GtkTreePath      *path;
   GtkTreeIter       iter;
-  gboolean          mutable;
-  gboolean          visible;
-  gint              idx;
+  gboolean mutable;
+  gboolean visible;
+  gint     idx;
 
   /* determine the selected row */
   selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (column_editor->tree_view));
@@ -459,6 +540,7 @@ thunar_column_editor_update_buttons (ThunarColumnEditor *column_editor)
     {
       /* determine the tree path for the iter */
       path = gtk_tree_model_get_path (model, &iter);
+
       if (G_UNLIKELY (path == NULL))
         return;
 
@@ -488,18 +570,17 @@ thunar_column_editor_update_buttons (ThunarColumnEditor *column_editor)
 
 
 static void
-thunar_column_editor_use_defaults (GtkWidget          *button,
-                                   ThunarColumnEditor *column_editor)
+thunar_column_editor_use_defaults (ThunarColumnEditor *column_editor,
+                                   GtkWidget          *button)
 {
-  static const gchar *PROPERTY_NAMES[] =
-  {
+  static const gchar *PROPERTY_NAMES[] = {
     "last-details-view-column-order",
     "last-details-view-visible-columns",
   };
 
   GtkTreeSelection *selection;
   GParamSpec       *pspec;
-  GValue            value = { 0, };
+  GValue            value = G_VALUE_INIT;
   guint             n;
 
   /* reset the given properties to its default values */
@@ -532,14 +613,14 @@ thunar_column_editor_use_defaults (GtkWidget          *button,
  * @parent is %NULL the default screen is used), the dialog won't
  * be modal and it will simply popup on the specified screen.
  **/
-void
+gboolean
 thunar_show_column_editor (gpointer parent)
 {
   GtkWidget *window = NULL;
   GtkWidget *dialog;
   GdkScreen *screen = NULL;
 
-  _thunar_return_if_fail (parent == NULL || GDK_IS_SCREEN (parent) || GTK_IS_WIDGET (parent));
+  _thunar_return_val_if_fail (parent == NULL || GDK_IS_SCREEN (parent) || GTK_IS_WIDGET (parent), FALSE);
 
   /* determine the screen for the dialog */
   if (G_UNLIKELY (parent == NULL))
@@ -580,5 +661,7 @@ thunar_show_column_editor (gpointer parent)
 
   /* destroy the dialog */
   gtk_widget_destroy (dialog);
-}
 
+  /* required in case of shortcut activation, in order to signal that the accel key got handled */
+  return TRUE;
+}

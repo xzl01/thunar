@@ -18,11 +18,11 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <thunar/thunar-tree-pane.h>
-#include <thunar/thunar-tree-view.h>
+#include "thunar/thunar-tree-pane.h"
+#include "thunar/thunar-tree-view.h"
 
 
 
@@ -37,24 +37,34 @@ enum
 
 
 
-static void          thunar_tree_pane_component_init        (ThunarComponentIface *iface);
-static void          thunar_tree_pane_navigator_init        (ThunarNavigatorIface *iface);
-static void          thunar_tree_pane_side_pane_init        (ThunarSidePaneIface  *iface);
-static void          thunar_tree_pane_dispose               (GObject              *object);
-static void          thunar_tree_pane_get_property          (GObject              *object,
-                                                             guint                 prop_id,
-                                                             GValue               *value,
-                                                             GParamSpec           *pspec);
-static void          thunar_tree_pane_set_property          (GObject              *object,
-                                                             guint                 prop_id,
-                                                             const GValue         *value,
-                                                             GParamSpec           *pspec);
-static ThunarFile   *thunar_tree_pane_get_current_directory (ThunarNavigator      *navigator);
-static void          thunar_tree_pane_set_current_directory (ThunarNavigator      *navigator,
-                                                             ThunarFile           *current_directory);
-static gboolean      thunar_tree_pane_get_show_hidden       (ThunarSidePane       *side_pane);
-static void          thunar_tree_pane_set_show_hidden       (ThunarSidePane       *side_pane,
-                                                             gboolean              show_hidden);
+static void
+thunar_tree_pane_component_init (ThunarComponentIface *iface);
+static void
+thunar_tree_pane_navigator_init (ThunarNavigatorIface *iface);
+static void
+thunar_tree_pane_side_pane_init (ThunarSidePaneIface *iface);
+static void
+thunar_tree_pane_dispose (GObject *object);
+static void
+thunar_tree_pane_get_property (GObject    *object,
+                               guint       prop_id,
+                               GValue     *value,
+                               GParamSpec *pspec);
+static void
+thunar_tree_pane_set_property (GObject      *object,
+                               guint         prop_id,
+                               const GValue *value,
+                               GParamSpec   *pspec);
+static ThunarFile *
+thunar_tree_pane_get_current_directory (ThunarNavigator *navigator);
+static void
+thunar_tree_pane_set_current_directory (ThunarNavigator *navigator,
+                                        ThunarFile      *current_directory);
+static gboolean
+thunar_tree_pane_get_show_hidden (ThunarSidePane *side_pane);
+static void
+thunar_tree_pane_set_show_hidden (ThunarSidePane *side_pane,
+                                  gboolean        show_hidden);
 
 
 
@@ -106,8 +116,8 @@ thunar_tree_pane_class_init (ThunarTreePaneClass *klass)
 static void
 thunar_tree_pane_component_init (ThunarComponentIface *iface)
 {
-  iface->get_selected_files = (gpointer) exo_noop_null;
-  iface->set_selected_files = (gpointer) exo_noop;
+  iface->get_selected_files = NULL;
+  iface->set_selected_files = NULL;
 }
 
 
@@ -141,8 +151,8 @@ thunar_tree_pane_init (ThunarTreePane *tree_pane)
 
   /* allocate the tree view */
   tree_pane->view = thunar_tree_view_new ();
-  exo_binding_new (G_OBJECT (tree_pane), "show-hidden", G_OBJECT (tree_pane->view), "show-hidden");
-  exo_binding_new (G_OBJECT (tree_pane), "current-directory", G_OBJECT (tree_pane->view), "current-directory");
+  g_object_bind_property (G_OBJECT (tree_pane), "show-hidden", G_OBJECT (tree_pane->view), "show-hidden", G_BINDING_SYNC_CREATE);
+  g_object_bind_property (G_OBJECT (tree_pane), "current-directory", G_OBJECT (tree_pane->view), "current-directory", G_BINDING_SYNC_CREATE);
   g_signal_connect_swapped (G_OBJECT (tree_pane->view), "change-directory", G_CALLBACK (thunar_navigator_change_directory), tree_pane);
   g_signal_connect_swapped (G_OBJECT (tree_pane->view), "open-new-tab", G_CALLBACK (thunar_navigator_open_new_tab), tree_pane);
   gtk_container_add (GTK_CONTAINER (tree_pane), tree_pane->view);
@@ -220,7 +230,7 @@ thunar_tree_pane_set_property (GObject      *object,
 
 
 
-static ThunarFile*
+static ThunarFile *
 thunar_tree_pane_get_current_directory (ThunarNavigator *navigator)
 {
   return THUNAR_TREE_PANE (navigator)->current_directory;
@@ -277,5 +287,3 @@ thunar_tree_pane_set_show_hidden (ThunarSidePane *side_pane,
       g_object_notify (G_OBJECT (tree_pane), "show-hidden");
     }
 }
-
-

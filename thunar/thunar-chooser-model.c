@@ -19,7 +19,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -29,10 +29,10 @@
 #include <string.h>
 #endif
 
-#include <thunar/thunar-chooser-model.h>
-#include <thunar/thunar-gobject-extensions.h>
-#include <thunar/thunar-icon-factory.h>
-#include <thunar/thunar-private.h>
+#include "thunar/thunar-chooser-model.h"
+#include "thunar/thunar-gobject-extensions.h"
+#include "thunar/thunar-icon-factory.h"
+#include "thunar/thunar-private.h"
 
 
 
@@ -45,18 +45,22 @@ enum
 
 
 
-
-static void     thunar_chooser_model_constructed    (GObject                  *object);
-static void     thunar_chooser_model_finalize       (GObject                  *object);
-static void     thunar_chooser_model_get_property   (GObject                  *object,
-                                                     guint                     prop_id,
-                                                     GValue                   *value,
-                                                     GParamSpec               *pspec);
-static void     thunar_chooser_model_set_property   (GObject                  *object,
-                                                     guint                     prop_id,
-                                                     const GValue             *value,
-                                                     GParamSpec               *pspec);
-static void     thunar_chooser_model_reload         (ThunarChooserModel       *model);
+static void
+thunar_chooser_model_constructed (GObject *object);
+static void
+thunar_chooser_model_finalize (GObject *object);
+static void
+thunar_chooser_model_get_property (GObject    *object,
+                                   guint       prop_id,
+                                   GValue     *value,
+                                   GParamSpec *pspec);
+static void
+thunar_chooser_model_set_property (GObject      *object,
+                                   guint         prop_id,
+                                   const GValue *value,
+                                   GParamSpec   *pspec);
+static void
+thunar_chooser_model_reload (ThunarChooserModel *model);
 
 
 
@@ -100,8 +104,7 @@ thunar_chooser_model_class_init (ThunarChooserModelClass *klass)
                                                         "content-type",
                                                         "content-type",
                                                         NULL,
-                                                        G_PARAM_CONSTRUCT_ONLY |
-                                                        EXO_PARAM_READWRITE));
+                                                        G_PARAM_CONSTRUCT_ONLY | EXO_PARAM_READWRITE));
 }
 
 
@@ -110,8 +113,7 @@ static void
 thunar_chooser_model_init (ThunarChooserModel *model)
 {
   /* allocate the types array for the columns */
-  GType column_types[THUNAR_CHOOSER_MODEL_N_COLUMNS] =
-  {
+  GType column_types[THUNAR_CHOOSER_MODEL_N_COLUMNS] = {
     G_TYPE_STRING,
     G_TYPE_ICON,
     G_TYPE_APP_INFO,
@@ -283,11 +285,24 @@ thunar_chooser_model_reload (ThunarChooserModel *model)
   GList *lp;
   GList *other = NULL;
   GList *recommended;
+  GList *default_app = NULL;
 
   _thunar_return_if_fail (THUNAR_IS_CHOOSER_MODEL (model));
   _thunar_return_if_fail (model->content_type != NULL);
 
   gtk_tree_store_clear (GTK_TREE_STORE (model));
+
+  /* get default application for this type and append it in @default_app */
+  default_app = g_list_prepend (default_app, g_app_info_get_default_for_type (model->content_type, FALSE));
+
+  /* If default application was already selected, then display it in Treeview */
+  if (default_app->data)
+    {
+      thunar_chooser_model_append (model,
+                                   _("Default Application"),
+                                   "org.xfce.settings.default-applications",
+                                   default_app);
+    }
 
   /* check if we have any applications for this type */
   recommended = g_app_info_get_all_for_type (model->content_type);
@@ -296,7 +311,7 @@ thunar_chooser_model_reload (ThunarChooserModel *model)
   recommended = g_list_sort (recommended, sort_app_infos);
   thunar_chooser_model_append (model,
                                _("Recommended Applications"),
-                               "preferences-desktop-default-applications",
+                               "org.xfce.settings.default-applications",
                                recommended);
 
   all = g_app_info_get_all ();
@@ -304,7 +319,8 @@ thunar_chooser_model_reload (ThunarChooserModel *model)
     {
       if (g_list_find_custom (recommended,
                               lp->data,
-                              compare_app_infos) == NULL)
+                              compare_app_infos)
+          == NULL)
         {
           other = g_list_prepend (other, lp->data);
         }
@@ -316,6 +332,10 @@ thunar_chooser_model_reload (ThunarChooserModel *model)
                                _("Other Applications"),
                                "gnome-applications",
                                other);
+
+  if (default_app->data != NULL)
+    g_object_unref (default_app->data);
+  g_list_free (default_app);
 
   g_list_free_full (recommended, g_object_unref);
   g_list_free_full (all, g_object_unref);
@@ -362,20 +382,21 @@ thunar_chooser_model_get_content_type (ThunarChooserModel *model)
 
 /**
  * thunar_chooser_model_remove:
- * @model : a #ThunarChooserModel.
- * @iter  : the #GtkTreeIter for the application to remove.
- * @error : return location for errors or %NULL.
+ * @model  : a #ThunarChooserModel.
+ * @iter   : the #GtkTreeIter for the application to remove.
+ * @delete : whether delete or just dissociate the application.
+ * @error  : return location for errors or %NULL.
  *
- * Tries to remove the application at the specified @iter from
- * the systems application database. Returns %TRUE on success,
- * otherwise %FALSE is returned.
+ * Tries to remove or dissociate the application at the specified
+ * @iter from the systems application database.
  *
  * Return value: %TRUE on success, %FALSE otherwise.
  **/
 gboolean
 thunar_chooser_model_remove (ThunarChooserModel *model,
                              GtkTreeIter        *iter,
-                             GError            **error)
+                             gboolean delete,
+                             GError **error)
 {
   GAppInfo *app_info;
   gboolean  succeed;
@@ -399,7 +420,7 @@ thunar_chooser_model_remove (ThunarChooserModel *model,
                                              error);
 
   /* try to delete the file */
-  if (succeed && g_app_info_delete (app_info))
+  if (delete &&succeed && g_app_info_delete (app_info))
     {
       g_set_error (error, G_IO_ERROR,
                    G_IO_ERROR_FAILED,
@@ -416,5 +437,3 @@ thunar_chooser_model_remove (ThunarChooserModel *model,
 
   return succeed;
 }
-
-

@@ -25,6 +25,7 @@
 
 G_BEGIN_DECLS;
 
+/* clang-format off */
 /* support macros for debugging */
 #ifndef NDEBUG
 #define _thunar_assert(expr)                  g_assert (expr)
@@ -73,6 +74,19 @@ G_STMT_START{                                                 \
   (iter).user_data = iter_user_data;                          \
 }G_STMT_END
 #endif
+
+/* support for the THUNAR_TREE_VIEW_MODEL */
+#define THUNAR_WARN_VOID_RETURN(expr)     \
+if (expr) {                               \
+  g_warn_if_reached();                    \
+  return;                                 \
+}
+#define THUNAR_WARN_RETURN_VAL(expr, val) \
+if (expr) {                               \
+  g_warn_if_reached();                    \
+  return val;                             \
+}
+/* clang-format on */
 
 G_END_DECLS;
 

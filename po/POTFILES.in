@@ -1,6 +1,7 @@
 thunar/main.c
 thunar/thunar-abstract-dialog.c
 thunar/thunar-abstract-icon-view.c
+thunar/thunar-action-manager.c
 thunar/thunar-application.c
 thunar/thunar-browser.c
 thunar/thunar-chooser-button.c
@@ -21,7 +22,6 @@ thunar/thunar-dnd.c
 thunar/thunar-emblem-chooser.c
 thunar/thunar-enum-types.c
 thunar/thunar-file.c
-thunar/thunar-file-monitor.c
 thunar/thunar-folder.c
 thunar/thunar-gdk-extensions.c
 thunar/thunar-gio-extensions.c
@@ -37,7 +37,8 @@ thunar/thunar-io-jobs.c
 thunar/thunar-io-jobs-util.c
 thunar/thunar-io-scan-directory.c
 thunar/thunar-job.c
-thunar/thunar-launcher.c
+thunar/thunar-job-operation.c
+thunar/thunar-job-operation-history.c
 thunar/thunar-list-model.c
 thunar/thunar-location-bar.c
 thunar/thunar-location-button.c
@@ -68,13 +69,16 @@ thunar/thunar-side-pane.c
 thunar/thunar-simple-job.c
 thunar/thunar-size-label.c
 thunar/thunar-standard-view.c
+thunar/thunar-standard-view-model.c
 thunar/thunar-statusbar.c
+thunar/thunar-toolbar-editor.c
 thunar/thunar-thumbnail-cache.c
 thunar/thunar-thumbnailer.c
 thunar/thunar-transfer-job.c
 thunar/thunar-tree-model.c
 thunar/thunar-tree-pane.c
 thunar/thunar-tree-view.c
+thunar/thunar-tree-view-model.c
 thunar/thunar-user.c
 thunar/thunar-util.c
 thunar/thunar-view.c
@@ -113,8 +117,8 @@ plugins/thunar-uca/thunar-uca-model.c
 plugins/thunar-uca/thunar-uca-plugin.c
 plugins/thunar-uca/thunar-uca-provider.c
 plugins/thunar-uca/uca.xml.in
-[type: gettext/glade]plugins/thunar-uca/thunar-uca-editor.ui
-[type: gettext/glade]plugins/thunar-uca/thunar-uca-chooser.ui
+plugins/thunar-uca/thunar-uca-editor.ui
+plugins/thunar-uca/thunar-uca-chooser.ui
 
 plugins/thunar-wallpaper/twp-provider.c
 

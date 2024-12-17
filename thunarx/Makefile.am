@@ -2,7 +2,8 @@ AM_CPPFLAGS =								\
 	-I$(top_srcdir)							\
 	-DG_LOG_DOMAIN=\"thunarx\"					\
 	-DTHUNARX_COMPILATION						\
-	-DTHUNARX_DIRECTORY=\"$(libdir)/thunarx-$(THUNARX_VERSION_API)\"	\
+	-DTHUNARX_DIRECTORY=\"$(DEFAULT_THUNARX_DIRS)\"	\
+	-DTHUNARX_ENABLE_CUSTOM_DIRS=\"$(CUSTOM_THUNARX_DIRS_ENABLED)\"	\
 	$(PLATFORM_CPPFLAGS)
 
 libthunarx_headers =							\
@@ -53,6 +54,7 @@ libthunarx_3_la_CFLAGS =						\
 	$(GIO_CFLAGS)							\
 	$(GTK_CFLAGS)							\
 	$(GMODULE_CFLAGS)						\
+	$(LIBXFCE4UTIL_CFLAGS)						\
 	$(PLATFORM_CFLAGS)
 
 libthunarx_3_la_LDFLAGS =						\
@@ -66,7 +68,8 @@ libthunarx_3_la_LIBADD =						\
 	$(GLIB_LIBS)							\
 	$(GMODULE_LIBS)							\
 	$(GIO_LIBS)							\
-	$(GTK_LIBS)
+	$(GTK_LIBS)							\
+	$(LIBXFCE4UTIL_LIBS)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = thunarx-3.pc
@@ -115,11 +118,13 @@ INTROSPECTION_COMPILER_ARGS = \
 	--includedir=.
 
 if HAVE_INTROSPECTION
+introspection_sources = $(filter-out %private.h %private.c, $(libthunarx_3_la_SOURCES))
+
 Thunarx-3.0.gir: libthunarx-3.la
 Thunarx_3_0_gir_INCLUDES = GObject-2.0 Gtk-3.0
 Thunarx_3_0_gir_CFLAGS = $(INCLUDES)
 Thunarx_3_0_gir_LIBS = libthunarx-3.la
-Thunarx_3_0_gir_FILES = $(libthunarx_3_la_SOURCES)
+Thunarx_3_0_gir_FILES = $(introspection_sources)
 INTROSPECTION_GIRS += Thunarx-3.0.gir
 
 girdir = $(datadir)/gir-1.0/

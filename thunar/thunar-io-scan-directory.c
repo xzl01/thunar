@@ -19,20 +19,33 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <gio/gio.h>
+#include "thunar/thunar-gio-extensions.h"
+#include "thunar/thunar-io-scan-directory.h"
+#include "thunar/thunar-job.h"
+#include "thunar/thunar-private.h"
 
 #include <exo/exo.h>
-
-#include <thunar/thunar-gio-extensions.h>
-#include <thunar/thunar-job.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-io-scan-directory.h>
+#include <gio/gio.h>
 
 
-
+/**
+ * thunar_io_scan_directory:
+ * @job                 : a #ThunarJob instance
+ * @file                : The folder to scan
+ * @flags               : @GFileQueryInfoFlags to consider during scan
+ * @recursively         : Wheather as well subfolders should be scanned
+ * @unlinking           : ???
+ * @return_thunar_files : TRUE in order to return the result as a list of #ThunarFile's, FALSE to return a list of #GFile's
+ * @n_files_max         : Maximum number of files to scan, NULL for unlimited
+ * @error               : Will be se on any error
+ *
+ * Scans the passed folder for files and returns them as a #GList
+ *
+ * Return value: (transfer full): the #GLIst of #GFiles or #ThunarFiles, to be released with e.g. 'g_list_free_full'
+ **/
 GList *
 thunar_io_scan_directory (ThunarJob          *job,
                           GFile              *file,
@@ -40,19 +53,21 @@ thunar_io_scan_directory (ThunarJob          *job,
                           gboolean            recursively,
                           gboolean            unlinking,
                           gboolean            return_thunar_files,
+                          guint              *n_files_max,
                           GError            **error)
 {
   GFileEnumerator *enumerator;
   GFileInfo       *info;
+  GFileInfo       *recent_info;
   GFileType        type;
   GError          *err = NULL;
   GFile           *child_file;
   GList           *child_files = NULL;
   GList           *files = NULL;
-  const gchar     *namespace;
-  ThunarFile      *thunar_file;
-  gboolean         is_mounted;
-  GCancellable    *cancellable = NULL;
+  const gchar *namespace;
+  ThunarFile   *thunar_file;
+  gboolean      is_mounted;
+  GCancellable *cancellable = NULL;
 
   _thunar_return_val_if_fail (G_IS_FILE (file), NULL);
   _thunar_return_val_if_fail (error == NULL || *error == NULL, NULL);
@@ -89,10 +104,8 @@ thunar_io_scan_directory (ThunarJob          *job,
 
   /* determine the namespace */
   if (return_thunar_files)
-    namespace = THUNARX_FILE_INFO_NAMESPACE;
-  else
-    namespace = G_FILE_ATTRIBUTE_STANDARD_TYPE ","
-                G_FILE_ATTRIBUTE_STANDARD_NAME;
+  namespace = THUNARX_FILE_INFO_NAMESPACE;
+  else namespace = G_FILE_ATTRIBUTE_STANDARD_TYPE "," G_FILE_ATTRIBUTE_STANDARD_NAME ", recent::*";
 
   /* try to read from the direectory */
   enumerator = g_file_enumerate_children (file, namespace,
@@ -111,8 +124,17 @@ thunar_io_scan_directory (ThunarJob          *job,
       /* query info of the child */
       info = g_file_enumerator_next_file (enumerator, cancellable, &err);
 
-      if (G_UNLIKELY (info == NULL))
+      /* break when end of enumerator is reached */
+      if (G_UNLIKELY (info == NULL && err == NULL))
         break;
+
+      if (G_UNLIKELY (n_files_max != NULL))
+        {
+          if (*n_files_max == 0)
+            break;
+          else
+            (*n_files_max)--;
+        }
 
       is_mounted = TRUE;
       if (err != NULL)
@@ -124,25 +146,60 @@ thunar_io_scan_directory (ThunarJob          *job,
             }
           else
             {
-              /* break on errors */
-              break;
+              if (info != NULL)
+                g_warning ("Error while scanning file: %s : %s", g_file_info_get_display_name (info), err->message);
+              else
+                g_warning ("Error while scanning directory: %s : %s", g_file_get_uri (file), err->message);
+
+              if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_FAILED))
+                {
+                  /* ignore any other IO error and continue processing the
+                   * remaining files */
+                  g_clear_error (&err);
+                  continue;
+                }
+              else
+                {
+                  /* break on other errors */
+                  break;
+                }
             }
         }
 
-      /* create GFile for the child */
-      child_file = g_file_get_child (file, g_file_info_get_name (info));
+      /* check if we are scanning `recent:///` */
+      if (g_file_has_uri_scheme (file, "recent"))
+        {
+          /* create Gfile using the target URI */
+          child_file = g_file_new_for_uri (g_file_info_get_attribute_string (info, G_FILE_ATTRIBUTE_STANDARD_TARGET_URI));
+
+          /* create new file info using Gfile*/
+          recent_info = info;
+          info = g_file_query_info (child_file, namespace, flags, cancellable, &err);
+
+          if (G_UNLIKELY (info == NULL))
+            {
+              g_object_unref (recent_info);
+              break;
+            }
+        }
+      else
+        {
+          /* create GFile for the child */
+          child_file = g_file_get_child (file, g_file_info_get_name (info));
+          recent_info = NULL;
+        }
 
       if (return_thunar_files)
         {
           /* Prepend the ThunarFile */
-          thunar_file = thunar_file_get_with_info (child_file, info, !is_mounted);
-          files = thunar_g_file_list_prepend (files, thunar_file);
+          thunar_file = thunar_file_get_with_info (child_file, info, recent_info, !is_mounted);
+          files = thunar_g_list_prepend_deep (files, thunar_file);
           g_object_unref (G_OBJECT (thunar_file));
         }
       else
         {
           /* Prepend the GFile */
-          files = thunar_g_file_list_prepend (files, child_file);
+          files = thunar_g_list_prepend_deep (files, child_file);
         }
 
       /* if the child is a directory and we need to recurse ... just do so */
@@ -151,7 +208,7 @@ thunar_io_scan_directory (ThunarJob          *job,
           && g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
         {
           child_files = thunar_io_scan_directory (job, child_file, flags, recursively,
-                                                  unlinking, return_thunar_files, &err);
+                                                  unlinking, return_thunar_files, n_files_max, &err);
 
           /* prepend children to the file list to make sure they're
            * processed first (required for unlinking) */
@@ -168,13 +225,13 @@ thunar_io_scan_directory (ThunarJob          *job,
   if (G_UNLIKELY (err != NULL))
     {
       g_propagate_error (error, err);
-      thunar_g_file_list_free (files);
+      thunar_g_list_free_full (files);
       return NULL;
     }
   else if (job != NULL && exo_job_set_error_if_cancelled (EXO_JOB (job), &err))
     {
       g_propagate_error (error, err);
-      thunar_g_file_list_free (files);
+      thunar_g_list_free_full (files);
       return NULL;
     }
 

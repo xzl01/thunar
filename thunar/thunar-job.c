@@ -19,7 +19,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -29,12 +29,13 @@
 #include <string.h>
 #endif
 
-#include <exo/exo.h>
+#include "thunar/thunar-enum-types.h"
+#include "thunar/thunar-job.h"
+#include "thunar/thunar-marshal.h"
+#include "thunar/thunar-private.h"
 
-#include <thunar/thunar-enum-types.h>
-#include <thunar/thunar-job.h>
-#include <thunar/thunar-marshal.h>
-#include <thunar/thunar-private.h>
+#include <exo/exo.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -43,7 +44,6 @@ enum
 {
   ASK,
   ASK_REPLACE,
-  ASK_JOBS,
   FILES_READY,
   NEW_FILES,
   FROZEN,
@@ -53,27 +53,31 @@ enum
 
 
 
-static void              thunar_job_finalize            (GObject            *object);
-static ThunarJobResponse thunar_job_real_ask            (ThunarJob          *job,
-                                                         const gchar        *message,
-                                                         ThunarJobResponse   choices);
-static ThunarJobResponse thunar_job_real_ask_replace    (ThunarJob          *job,
-                                                         ThunarFile         *source_file,
-                                                         ThunarFile         *target_file);
+static void
+thunar_job_finalize (GObject *object);
+static ThunarJobResponse
+thunar_job_real_ask (ThunarJob        *job,
+                     const gchar      *message,
+                     ThunarJobResponse choices);
+static ThunarJobResponse
+thunar_job_real_ask_replace (ThunarJob  *job,
+                             ThunarFile *source_file,
+                             ThunarFile *target_file);
 
 
 
 struct _ThunarJobPrivate
 {
-  ThunarJobResponse earlier_ask_create_response;
-  ThunarJobResponse earlier_ask_overwrite_response;
-  ThunarJobResponse earlier_ask_delete_response;
-  ThunarJobResponse earlier_ask_skip_response;
-  GList            *total_files;
-  guint             n_total_files;
-  gboolean          pausable;
-  gboolean          paused; /* the job has been manually paused using the UI */
-  gboolean          frozen; /* the job has been automaticaly paused regarding some parallel copy behavior */
+  ThunarJobResponse      earlier_ask_create_response;
+  ThunarJobResponse      earlier_ask_overwrite_response;
+  ThunarJobResponse      earlier_ask_delete_response;
+  ThunarJobResponse      earlier_ask_skip_response;
+  GList                 *total_files;
+  guint                  n_total_files;
+  gboolean               pausable;
+  gboolean               paused; /* the job has been manually paused using the UI */
+  gboolean               frozen; /* the job has been automaticaly paused regarding some parallel copy behavior */
+  ThunarOperationLogMode log_mode;
 };
 
 
@@ -120,15 +124,15 @@ thunar_job_class_init (ThunarJobClass *klass)
    * Return value: the selected choice.
    **/
   job_signals[ASK] =
-    g_signal_new (I_("ask"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_NO_HOOKS | G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (ThunarJobClass, ask),
-                  _thunar_job_ask_accumulator, NULL,
-                  _thunar_marshal_FLAGS__STRING_FLAGS,
-                  THUNAR_TYPE_JOB_RESPONSE,
-                  2, G_TYPE_STRING,
-                  THUNAR_TYPE_JOB_RESPONSE);
+  g_signal_new (I_ ("ask"),
+                G_TYPE_FROM_CLASS (klass),
+                G_SIGNAL_NO_HOOKS | G_SIGNAL_RUN_LAST,
+                G_STRUCT_OFFSET (ThunarJobClass, ask),
+                _thunar_job_ask_accumulator, NULL,
+                _thunar_marshal_FLAGS__STRING_FLAGS,
+                THUNAR_TYPE_JOB_RESPONSE,
+                2, G_TYPE_STRING,
+                THUNAR_TYPE_JOB_RESPONSE);
 
   /**
    * ThunarJob::ask-replace:
@@ -143,14 +147,14 @@ thunar_job_class_init (ThunarJobClass *klass)
    * Return value: the selected choice.
    **/
   job_signals[ASK_REPLACE] =
-    g_signal_new (I_("ask-replace"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_NO_HOOKS | G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (ThunarJobClass, ask_replace),
-                  _thunar_job_ask_accumulator, NULL,
-                  _thunar_marshal_FLAGS__OBJECT_OBJECT,
-                  THUNAR_TYPE_JOB_RESPONSE,
-                  2, THUNAR_TYPE_FILE, THUNAR_TYPE_FILE);
+  g_signal_new (I_ ("ask-replace"),
+                G_TYPE_FROM_CLASS (klass),
+                G_SIGNAL_NO_HOOKS | G_SIGNAL_RUN_LAST,
+                G_STRUCT_OFFSET (ThunarJobClass, ask_replace),
+                _thunar_job_ask_accumulator, NULL,
+                _thunar_marshal_FLAGS__OBJECT_OBJECT,
+                THUNAR_TYPE_JOB_RESPONSE,
+                2, THUNAR_TYPE_FILE, THUNAR_TYPE_FILE);
 
   /**
    * ThunarJob::files-ready:
@@ -181,11 +185,11 @@ thunar_job_class_init (ThunarJobClass *klass)
    *               @file_list, else %FALSE.
    **/
   job_signals[FILES_READY] =
-    g_signal_new (I_("files-ready"),
-                  G_TYPE_FROM_CLASS (klass), G_SIGNAL_NO_HOOKS,
-                  0, g_signal_accumulator_true_handled, NULL,
-                  _thunar_marshal_BOOLEAN__POINTER,
-                  G_TYPE_BOOLEAN, 1, G_TYPE_POINTER);
+  g_signal_new (I_ ("files-ready"),
+                G_TYPE_FROM_CLASS (klass), G_SIGNAL_NO_HOOKS,
+                0, g_signal_accumulator_true_handled, NULL,
+                _thunar_marshal_BOOLEAN__POINTER,
+                G_TYPE_BOOLEAN, 1, G_TYPE_POINTER);
 
   /**
    * ThunarJob::new-files:
@@ -198,27 +202,11 @@ thunar_job_class_init (ThunarJobClass *klass)
    * the application on creation of the @job.
    **/
   job_signals[NEW_FILES] =
-    g_signal_new (I_("new-files"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_NO_HOOKS, 0, NULL, NULL,
-                  g_cclosure_marshal_VOID__POINTER,
-                  G_TYPE_NONE, 1, G_TYPE_POINTER);
-
-  /**
-   * ThunarJob::ask-jobs:
-   * @job      : a #ThunarJob.
-   *
-   * Emitted to ask the running job list.
-   *
-   * Return value: GList* of running jobs.
-   **/
-  job_signals[ASK_JOBS] =
-    g_signal_new (I_("ask-jobs"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_NO_HOOKS, 0,
-                  NULL, NULL,
-                  g_cclosure_marshal_generic,
-                  G_TYPE_POINTER, 0);
+  g_signal_new (I_ ("new-files"),
+                G_TYPE_FROM_CLASS (klass),
+                G_SIGNAL_NO_HOOKS, 0, NULL, NULL,
+                g_cclosure_marshal_VOID__POINTER,
+                G_TYPE_NONE, 1, G_TYPE_POINTER);
 
   /**
    * ThunarJob::frozen:
@@ -227,12 +215,12 @@ thunar_job_class_init (ThunarJobClass *klass)
    * This signal is emitted by the @job right after the @job is being frozen.
    **/
   job_signals[FROZEN] =
-    g_signal_new (I_("frozen"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_NO_HOOKS, 0,
-                  NULL, NULL,
-                  g_cclosure_marshal_generic,
-                  G_TYPE_NONE, 0);
+  g_signal_new (I_ ("frozen"),
+                G_TYPE_FROM_CLASS (klass),
+                G_SIGNAL_NO_HOOKS, 0,
+                NULL, NULL,
+                g_cclosure_marshal_generic,
+                G_TYPE_NONE, 0);
 
   /**
    * ThunarJob::unfrozen:
@@ -241,12 +229,12 @@ thunar_job_class_init (ThunarJobClass *klass)
    * This signal is emitted by the @job right after the @job is being unfrozen.
    **/
   job_signals[UNFROZEN] =
-    g_signal_new (I_("unfrozen"),
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_NO_HOOKS, 0,
-                  NULL, NULL,
-                  g_cclosure_marshal_generic,
-                  G_TYPE_NONE, 0);
+  g_signal_new (I_ ("unfrozen"),
+                G_TYPE_FROM_CLASS (klass),
+                G_SIGNAL_NO_HOOKS, 0,
+                NULL, NULL,
+                g_cclosure_marshal_generic,
+                G_TYPE_NONE, 0);
 }
 
 
@@ -301,9 +289,15 @@ thunar_job_real_ask_replace (ThunarJob  *job,
   _thunar_return_val_if_fail (THUNAR_IS_FILE (source_file), THUNAR_JOB_RESPONSE_CANCEL);
   _thunar_return_val_if_fail (THUNAR_IS_FILE (target_file), THUNAR_JOB_RESPONSE_CANCEL);
 
-  message = g_strdup_printf (_("The file \"%s\" already exists. Would you like to replace it?\n\n"
-                               "If you replace an existing file, its contents will be overwritten."),
-                             thunar_file_get_display_name (source_file));
+  if (g_strcmp0 (thunar_file_get_display_name (source_file), thunar_file_get_basename (source_file)) != 0)
+    message = g_strdup_printf (_("The file \"%s\" (%s) already exists. Would you like to replace it?\n\n"
+                                 "If you replace an existing file, its contents will be overwritten."),
+                               thunar_file_get_display_name (source_file),
+                               thunar_file_get_basename (source_file));
+  else
+    message = g_strdup_printf (_("The file \"%s\" already exists. Would you like to replace it?\n\n"
+                                 "If you replace an existing file, its contents will be overwritten."),
+                               thunar_file_get_display_name (source_file));
 
   g_signal_emit (job, job_signals[ASK], 0, message,
                  THUNAR_JOB_RESPONSE_REPLACE
@@ -704,15 +698,10 @@ thunar_job_new_files (ThunarJob   *job,
 
 
 
-GList *
-thunar_job_ask_jobs (ThunarJob *job)
+guint
+thunar_job_get_n_total_files (ThunarJob *job)
 {
-  GList* jobs = NULL;
-
-  _thunar_return_val_if_fail (THUNAR_IS_JOB (job), NULL);
-
-  g_signal_emit (EXO_JOB (job), job_signals[ASK_JOBS], 0, &jobs);
-  return jobs;
+  return job->priv->n_total_files;
 }
 
 
@@ -831,4 +820,21 @@ thunar_job_processing_file (ThunarJob *job,
   /* verify that we have total files set */
   if (G_LIKELY (job->priv->n_total_files > 0))
     exo_job_percent (EXO_JOB (job), (n_processed * 100.0) / job->priv->n_total_files);
+}
+
+
+
+void
+thunar_job_set_log_mode (ThunarJob             *job,
+                         ThunarOperationLogMode log_mode)
+{
+  job->priv->log_mode = log_mode;
+}
+
+
+
+ThunarOperationLogMode
+thunar_job_get_log_mode (ThunarJob *job)
+{
+  return job->priv->log_mode;
 }

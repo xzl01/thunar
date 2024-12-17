@@ -18,7 +18,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
 #ifdef HAVE_MEMORY_H
@@ -28,22 +28,23 @@
 #include <string.h>
 #endif
 
-#include <libxfce4ui/libxfce4ui.h>
+#include "thunar/thunar-abstract-dialog.h"
+#include "thunar/thunar-action-manager.h"
+#include "thunar/thunar-application.h"
+#include "thunar/thunar-dialogs.h"
+#include "thunar/thunar-gtk-extensions.h"
+#include "thunar/thunar-icon-factory.h"
+#include "thunar/thunar-icon-renderer.h"
+#include "thunar/thunar-menu.h"
+#include "thunar/thunar-preferences.h"
+#include "thunar/thunar-private.h"
+#include "thunar/thunar-properties-dialog.h"
+#include "thunar/thunar-renamer-dialog.h"
+#include "thunar/thunar-renamer-model.h"
+#include "thunar/thunar-renamer-progress.h"
+#include "thunar/thunar-util.h"
 
-#include <thunar/thunar-abstract-dialog.h>
-#include <thunar/thunar-application.h>
-#include <thunar/thunar-dialogs.h>
-#include <thunar/thunar-gtk-extensions.h>
-#include <thunar/thunar-icon-factory.h>
-#include <thunar/thunar-icon-renderer.h>
-#include <thunar/thunar-launcher.h>
-#include <thunar/thunar-launcher.h>
-#include <thunar/thunar-menu.h>
-#include <thunar/thunar-private.h>
-#include <thunar/thunar-properties-dialog.h>
-#include <thunar/thunar-renamer-dialog.h>
-#include <thunar/thunar-renamer-model.h>
-#include <thunar/thunar-renamer-progress.h>
+#include <libxfce4ui/libxfce4ui.h>
 
 
 
@@ -74,77 +75,112 @@ typedef enum
 
 
 
-static void        thunar_renamer_dialog_dispose               (GObject                  *object);
-static void        thunar_renamer_dialog_finalize              (GObject                  *object);
-static void        thunar_renamer_dialog_get_property          (GObject                  *object,
-                                                                guint                     prop_id,
-                                                                GValue                   *value,
-                                                                GParamSpec               *pspec);
-static void        thunar_renamer_dialog_set_property          (GObject                  *object,
-                                                                guint                     prop_id,
-                                                                const GValue             *value,
-                                                                GParamSpec               *pspec);
-static void        thunar_renamer_dialog_realize               (GtkWidget                *widget);
-static void        thunar_renamer_dialog_unrealize             (GtkWidget                *widget);
-static void        thunar_renamer_dialog_response              (GtkDialog                *dialog,
-                                                                gint                      response);
-static void        thunar_renamer_dialog_context_menu          (ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_help                  (ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_save                  (ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_action_add_files      (ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_action_remove_files   (ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_action_clear          (ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_action_about          (ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_name_column_clicked   (GtkTreeViewColumn        *column,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static gboolean    thunar_renamer_dialog_button_press_event    (GtkWidget                *tree_view,
-                                                                GdkEventButton           *event,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_drag_data_received    (GtkWidget                *tree_view,
-                                                                GdkDragContext           *context,
-                                                                gint                      x,
-                                                                gint                      y,
-                                                                GtkSelectionData         *selection_data,
-                                                                guint                     info,
-                                                                guint                     timestamp,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_drag_leave            (GtkWidget                *tree_view,
-                                                                GdkDragContext           *context,
-                                                                guint                     timestamp,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static gboolean    thunar_renamer_dialog_drag_motion           (GtkWidget                *tree_view,
-                                                                GdkDragContext           *context,
-                                                                gint                      x,
-                                                                gint                      y,
-                                                                guint                     timestamp,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static gboolean    thunar_renamer_dialog_drag_drop             (GtkWidget                *tree_view,
-                                                                GdkDragContext           *context,
-                                                                gint                      x,
-                                                                gint                      y,
-                                                                guint                     timestamp,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_notify_page           (GtkNotebook              *notebook,
-                                                                GParamSpec               *pspec,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static gboolean    thunar_renamer_dialog_popup_menu            (GtkWidget                *tree_view,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_row_activated         (GtkTreeView              *tree_view,
-                                                                GtkTreePath              *path,
-                                                                GtkTreeViewColumn        *column,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static void        thunar_renamer_dialog_selection_changed     (GtkTreeSelection         *selection,
-                                                                ThunarRenamerDialog      *renamer_dialog);
-static ThunarFile *thunar_renamer_dialog_get_current_directory (ThunarRenamerDialog *renamer_dialog);
-static void        thunar_renamer_dialog_set_current_directory (ThunarRenamerDialog *renamer_dialog,
-                                                                ThunarFile          *current_directory);
-static GList      *thunar_renamer_dialog_get_selected_files    (ThunarRenamerDialog *renamer_dialog);
-static gboolean    thunar_renamer_dialog_get_standalone        (ThunarRenamerDialog *renamer_dialog);
-static void        thunar_renamer_dialog_set_standalone        (ThunarRenamerDialog *renamer_dialog,
-                                                                gboolean             fixed);
-static GtkWidget  *thunar_renamer_dialog_append_menu_item      (ThunarRenamerDialog *renamer_dialog,
-                                                                GtkMenuShell        *menu,
-                                                                ThunarRenamerAction  action);
+static void
+thunar_renamer_dialog_dispose (GObject *object);
+static void
+thunar_renamer_dialog_finalize (GObject *object);
+static void
+thunar_renamer_dialog_get_property (GObject    *object,
+                                    guint       prop_id,
+                                    GValue     *value,
+                                    GParamSpec *pspec);
+static void
+thunar_renamer_dialog_set_property (GObject      *object,
+                                    guint         prop_id,
+                                    const GValue *value,
+                                    GParamSpec   *pspec);
+static void
+thunar_renamer_dialog_realize (GtkWidget *widget);
+static void
+thunar_renamer_dialog_unrealize (GtkWidget *widget);
+static void
+thunar_renamer_dialog_response (GtkDialog *dialog,
+                                gint       response);
+static void
+thunar_renamer_dialog_context_menu (ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_help (ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_save (ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_action_add_files (ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_action_remove_files (ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_action_clear (ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_action_about (ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_name_column_clicked (GtkTreeViewColumn   *column,
+                                           ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_button_press_event (GtkWidget           *tree_view,
+                                          GdkEventButton      *event,
+                                          ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_drag_data_received (GtkWidget           *tree_view,
+                                          GdkDragContext      *context,
+                                          gint                 x,
+                                          gint                 y,
+                                          GtkSelectionData    *selection_data,
+                                          guint                info,
+                                          guint                timestamp,
+                                          ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_drag_leave (GtkWidget           *tree_view,
+                                  GdkDragContext      *context,
+                                  guint                timestamp,
+                                  ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_drag_motion (GtkWidget           *tree_view,
+                                   GdkDragContext      *context,
+                                   gint                 x,
+                                   gint                 y,
+                                   guint                timestamp,
+                                   ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_drag_drop (GtkWidget           *tree_view,
+                                 GdkDragContext      *context,
+                                 gint                 x,
+                                 gint                 y,
+                                 guint                timestamp,
+                                 ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_notify_page (GtkNotebook         *notebook,
+                                   GParamSpec          *pspec,
+                                   ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_popup_menu (GtkWidget           *tree_view,
+                                  ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_row_activated (GtkTreeView         *tree_view,
+                                     GtkTreePath         *path,
+                                     GtkTreeViewColumn   *column,
+                                     ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_selection_changed (GtkTreeSelection    *selection,
+                                         ThunarRenamerDialog *renamer_dialog);
+static ThunarFile *
+thunar_renamer_dialog_get_current_directory (ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_set_current_directory (ThunarRenamerDialog *renamer_dialog,
+                                             ThunarFile          *current_directory);
+static GList *
+thunar_renamer_dialog_get_selected_files (ThunarRenamerDialog *renamer_dialog);
+static gboolean
+thunar_renamer_dialog_get_standalone (ThunarRenamerDialog *renamer_dialog);
+static void
+thunar_renamer_dialog_set_standalone (ThunarRenamerDialog *renamer_dialog,
+                                      gboolean             fixed);
+static GtkWidget *
+thunar_renamer_dialog_append_menu_item (ThunarRenamerDialog *renamer_dialog,
+                                        GtkMenuShell        *menu,
+                                        ThunarRenamerAction  action);
+static gboolean
+thunar_renamer_configure_event (GtkWidget         *widget,
+                                GdkEventConfigure *event);
+static void
+thunar_renamer_save_geometry_timer_destroy (gpointer user_data);
 
 
 
@@ -158,35 +194,40 @@ struct _ThunarRenamerDialog
   ThunarAbstractDialog __parent__;
 
   /* need to grab a reference on the icon factory for the standalone version */
-  ThunarIconFactory   *icon_factory;
+  ThunarIconFactory *icon_factory;
 
-  ThunarRenamerModel  *model;
+  ThunarRenamerModel *model;
 
-  ThunarLauncher      *launcher;
+  ThunarActionManager *action_mgr;
 
-  GtkWidget           *cancel_button;
-  GtkWidget           *close_button;
+  GtkWidget *close_button;
 
-  GtkWidget           *tree_view;
-  GtkWidget           *progress;
+  GtkWidget *tree_view;
+  GtkWidget *progress;
 
-  GtkTreeViewColumn   *name_column;
+  GtkWidget *mode_combo;
+
+  GtkTreeViewColumn *name_column;
 
   /* the current directory used for the "Add Files" dialog */
-  ThunarFile          *current_directory;
+  ThunarFile *current_directory;
 
-  /* the list of currently selected files */
-  GList               *selected_files;
+  /* #GList of currently selected #ThunarFile<!---->s */
+  GList *selected_files;
 
   /* whether the dialog should act like a standalone application */
-  gboolean             standalone;
+  gboolean standalone;
 
   /* TRUE while drop highlighting */
-  gboolean             drag_highlighted;
+  gboolean drag_highlighted;
+
+  /* support to remember window geometry */
+  guint save_geometry_timer_id;
 };
 
 
 
+/* clang-format off */
 static XfceGtkActionEntry thunar_renamer_action_entries[] =
 {
     { THUNAR_RENAMER_ACTION_ADD_FILES,    "<Actions>/ThunarRenamerDialog/add-files",    "", XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_Add Files..."), N_ ("Include additional files in the list of files to be renamed"), "list-add",    G_CALLBACK (thunar_renamer_dialog_action_add_files),   },
@@ -194,12 +235,12 @@ static XfceGtkActionEntry thunar_renamer_action_entries[] =
     { THUNAR_RENAMER_ACTION_CLEAR,        "",                                           "", XFCE_GTK_IMAGE_MENU_ITEM, N_ ("Clear"),         N_ ("Clear the file list below"),                                   "edit-clear",  G_CALLBACK (thunar_renamer_dialog_action_clear),       },
     { THUNAR_RENAMER_ACTION_ABOUT,        "",                                           "", XFCE_GTK_IMAGE_MENU_ITEM, N_ ("_About"),        N_ ("Display information about Thunar Bulk Rename"),                "help-about",  G_CALLBACK (thunar_renamer_dialog_action_about),       },
 };
+/* clang-format on */
 
-#define get_action_entry(id) xfce_gtk_get_action_entry_by_id(thunar_renamer_action_entries,G_N_ELEMENTS(thunar_renamer_action_entries),id)
+#define get_action_entry(id) xfce_gtk_get_action_entry_by_id (thunar_renamer_action_entries, G_N_ELEMENTS (thunar_renamer_action_entries), id)
 
 /* Target types for dropping to the tree view */
-static const GtkTargetEntry drop_targets[] =
-{
+static const GtkTargetEntry drop_targets[] = {
   { "GTK_TREE_MODEL_ROW", GTK_TARGET_SAME_WIDGET, TARGET_GTK_TREE_MODEL_ROW },
   { "text/uri-list", 0, TARGET_TEXT_URI_LIST }
 };
@@ -231,6 +272,7 @@ thunar_renamer_dialog_class_init (ThunarRenamerDialogClass *klass)
   gtkwidget_class = GTK_WIDGET_CLASS (klass);
   gtkwidget_class->realize = thunar_renamer_dialog_realize;
   gtkwidget_class->unrealize = thunar_renamer_dialog_unrealize;
+  gtkwidget_class->configure_event = thunar_renamer_configure_event;
 
   gtkdialog_class = GTK_DIALOG_CLASS (klass);
   gtkdialog_class->response = thunar_renamer_dialog_response;
@@ -301,6 +343,7 @@ static void
 thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
 {
   ThunarxProviderFactory *provider_factory;
+  ThunarPreferences      *preferences;
   GtkTreeViewColumn      *column;
   GtkTreeSelection       *selection;
   GtkCellRenderer        *renderer;
@@ -328,6 +371,9 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
   GList                  *renamers = NULL;
   GList                  *lp;
   gint                    active = 0;
+  gint                    last_dialog_width;
+  gint                    last_dialog_height;
+  gint                    last_dialog_maximized;
   guint                   n;
 
   /* allocate a new bulk rename model */
@@ -350,24 +396,37 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
   g_list_free (providers);
 
   /* initialize the dialog */
-  gtk_window_set_default_size (GTK_WINDOW (renamer_dialog), 510, 490);
+  preferences = thunar_preferences_get ();
+  g_object_get (G_OBJECT (preferences),
+                "last-renamer-dialog-width", &last_dialog_width,
+                "last-renamer-dialog-height", &last_dialog_height,
+                "last-renamer-dialog-maximized", &last_dialog_maximized,
+                NULL);
+  g_object_unref (preferences);
+  gtk_window_set_default_size (GTK_WINDOW (renamer_dialog), last_dialog_width, last_dialog_height);
+
+  /* restore the maxized state of the dialog */
+  if (G_UNLIKELY (last_dialog_maximized))
+    gtk_window_maximize (GTK_WINDOW (renamer_dialog));
+
   gtk_window_set_title (GTK_WINDOW (renamer_dialog), _("Rename Multiple Files"));
 
-  /* add the Cancel/Close buttons */
-  renamer_dialog->cancel_button = gtk_dialog_add_button (GTK_DIALOG (renamer_dialog), _("_Cancel"), GTK_RESPONSE_CANCEL);
+  /* add the "Close" button */
   renamer_dialog->close_button = gtk_dialog_add_button (GTK_DIALOG (renamer_dialog), _("_Close"), GTK_RESPONSE_DELETE_EVENT);
-  gtk_widget_hide (renamer_dialog->close_button);
+  gtk_widget_set_tooltip_text (renamer_dialog->close_button, _("Close this window, cancel further changes."));
 
-  /* add the "Rename Files" button */
-  button = gtk_dialog_add_button (GTK_DIALOG (renamer_dialog), _("_Rename Files"), GTK_RESPONSE_ACCEPT);
-  exo_binding_new (G_OBJECT (renamer_dialog->model), "can-rename", G_OBJECT (button), "sensitive");
-  gtk_dialog_set_default_response (GTK_DIALOG (renamer_dialog), GTK_RESPONSE_ACCEPT);
-  gtk_widget_set_tooltip_text (button, _("Click here to actually rename the files listed above to their new names."));
+  /* add the "Rename" button */
+  button = gtk_dialog_add_button (GTK_DIALOG (renamer_dialog), _("_Rename"), GTK_RESPONSE_APPLY);
+  g_object_bind_property (G_OBJECT (renamer_dialog->model), "can-rename",
+                          G_OBJECT (button), "sensitive",
+                          G_BINDING_SYNC_CREATE);
+  gtk_dialog_set_default_response (GTK_DIALOG (renamer_dialog), GTK_RESPONSE_APPLY);
+  gtk_widget_set_tooltip_text (button, _("Rename items listed above, keep this window open."));
 
-  /* setup the launcher support for this dialog */
-  renamer_dialog->launcher = g_object_new (THUNAR_TYPE_LAUNCHER, "widget", GTK_WIDGET (renamer_dialog), NULL);
-  exo_binding_new (G_OBJECT (renamer_dialog), "selected-files", G_OBJECT (renamer_dialog->launcher), "selected-files");
-  exo_binding_new (G_OBJECT (renamer_dialog), "current-directory", G_OBJECT (renamer_dialog->launcher), "current-directory");
+  /* setup the action manager support for this dialog */
+  renamer_dialog->action_mgr = g_object_new (THUNAR_TYPE_ACTION_MANAGER, "widget", GTK_WIDGET (renamer_dialog), NULL);
+  g_object_bind_property (G_OBJECT (renamer_dialog), "selected-files", G_OBJECT (renamer_dialog->action_mgr), "selected-files", G_BINDING_SYNC_CREATE);
+  g_object_bind_property (G_OBJECT (renamer_dialog), "current-directory", G_OBJECT (renamer_dialog->action_mgr), "current-directory", G_BINDING_SYNC_CREATE);
 
   /* add the toolbar to the dialog */
   toolbar = gtk_toolbar_new ();
@@ -381,7 +440,7 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
   gtk_container_add (GTK_CONTAINER (toolbar), GTK_WIDGET (seperator));
   gtk_widget_show (GTK_WIDGET (seperator));
   xfce_gtk_tool_button_new_from_action_entry (get_action_entry (THUNAR_RENAMER_ACTION_ABOUT), G_OBJECT (renamer_dialog), GTK_TOOLBAR (toolbar));
-  exo_binding_new (G_OBJECT (renamer_dialog), "standalone", G_OBJECT (toolbar), "visible");
+  g_object_bind_property (G_OBJECT (renamer_dialog), "standalone", G_OBJECT (toolbar), "visible", G_BINDING_SYNC_CREATE);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (renamer_dialog))), toolbar, FALSE, FALSE, 0);
   gtk_widget_show_all (GTK_WIDGET (toolbar));
 
@@ -459,10 +518,10 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
   /* create the rename progress bar */
   renamer_dialog->progress = thunar_renamer_progress_new ();
   gtk_box_pack_start (GTK_BOX (vbox), renamer_dialog->progress, FALSE, FALSE, 0);
-  exo_binding_new_with_negation (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (rbox), "visible");
-  exo_binding_new_with_negation (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (swin), "sensitive");
-  exo_binding_new_with_negation (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (toolbar), "sensitive");
-  exo_binding_new (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (renamer_dialog->model), "frozen");
+  g_object_bind_property (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (rbox), "visible", G_BINDING_INVERT_BOOLEAN | G_BINDING_SYNC_CREATE);
+  g_object_bind_property (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (swin), "sensitive", G_BINDING_INVERT_BOOLEAN | G_BINDING_SYNC_CREATE);
+  g_object_bind_property (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (toolbar), "sensitive", G_BINDING_INVERT_BOOLEAN | G_BINDING_SYNC_CREATE);
+  g_object_bind_property (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (renamer_dialog->model), "frozen", G_BINDING_SYNC_CREATE);
 
   /* synchronize the height of the progress bar and the rbox with the combos */
   size_group = gtk_size_group_new (GTK_SIZE_GROUP_VERTICAL);
@@ -472,9 +531,11 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
 
   /* create the frame for the renamer widgets */
   frame = g_object_new (GTK_TYPE_FRAME, "shadow-type", GTK_SHADOW_ETCHED_IN, NULL);
-  exo_binding_new_with_negation (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (frame), "sensitive");
+  g_object_bind_property (G_OBJECT (renamer_dialog->progress), "visible", G_OBJECT (frame), "sensitive", G_BINDING_INVERT_BOOLEAN | G_BINDING_SYNC_CREATE);
   gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
   gtk_widget_show (frame);
+
+  renamer_dialog->mode_combo = NULL;
 
   /* check if we have any renamers */
   if (G_LIKELY (renamers != NULL))
@@ -504,21 +565,22 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
       gtk_container_add (GTK_CONTAINER (button), image);
       gtk_widget_show (image);
 
-      /* create the name/suffix/both combo box */
+      /* create the name/extension/both combo box */
       mcombo = gtk_combo_box_text_new ();
       klass = g_type_class_ref (THUNAR_TYPE_RENAMER_MODE);
       active_str = xfce_rc_read_entry_untranslated (rc, "LastActiveMode", "");
       for (active = 0, n = 0; n < klass->n_values; ++n)
         {
-          if (exo_str_is_equal (active_str, klass->values[n].value_name))
+          if (g_strcmp0 (active_str, klass->values[n].value_name) == 0)
             active = n;
           gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (mcombo), _(klass->values[n].value_nick));
         }
-      exo_mutual_binding_new (G_OBJECT (renamer_dialog->model), "mode", G_OBJECT (mcombo), "active");
+      g_object_bind_property (G_OBJECT (renamer_dialog->model), "mode", G_OBJECT (mcombo), "active", G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
       gtk_box_pack_end (GTK_BOX (rbox), mcombo, FALSE, FALSE, 0);
       gtk_combo_box_set_active (GTK_COMBO_BOX (mcombo), active);
       g_type_class_unref (klass);
       gtk_widget_show (mcombo);
+      renamer_dialog->mode_combo = mcombo;
 
       /* allocate the notebook with the renamers */
       notebook = gtk_notebook_new ();
@@ -538,7 +600,7 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
           gtk_notebook_append_page (GTK_NOTEBOOK (notebook), lp->data, NULL);
 
           /* check if this page should be active by default */
-          if (exo_str_is_equal (G_OBJECT_TYPE_NAME (lp->data), active_str))
+          if (g_strcmp0 (G_OBJECT_TYPE_NAME (lp->data), active_str) == 0)
             active = g_list_position (renamers, lp);
 
           /* try to load the settings for the renamer */
@@ -567,7 +629,7 @@ thunar_renamer_dialog_init (ThunarRenamerDialog *renamer_dialog)
       gtk_combo_box_set_active (GTK_COMBO_BOX (rcombo), active);
 
       /* connect the combo box to the notebook */
-      exo_binding_new (G_OBJECT (rcombo), "active", G_OBJECT (notebook), "page");
+      g_object_bind_property (G_OBJECT (rcombo), "active", G_OBJECT (notebook), "page", G_BINDING_SYNC_CREATE);
 
       /* close the config handle */
       xfce_rc_close (rc);
@@ -625,6 +687,10 @@ thunar_renamer_dialog_dispose (GObject *object)
 {
   ThunarRenamerDialog *renamer_dialog = THUNAR_RENAMER_DIALOG (object);
 
+  /* destroy the save geometry timer source */
+  if (G_UNLIKELY (renamer_dialog->save_geometry_timer_id != 0))
+    g_source_remove (renamer_dialog->save_geometry_timer_id);
+
   /* reset the "current-directory" property */
   thunar_renamer_dialog_set_current_directory (renamer_dialog, NULL);
 
@@ -638,8 +704,8 @@ thunar_renamer_dialog_finalize (GObject *object)
 {
   ThunarRenamerDialog *renamer_dialog = THUNAR_RENAMER_DIALOG (object);
 
-  /* release the launcher support */
-  g_object_unref (G_OBJECT (renamer_dialog->launcher));
+  /* release the action manager support */
+  g_object_unref (G_OBJECT (renamer_dialog->action_mgr));
 
   /* release our bulk rename model */
   g_object_unref (G_OBJECT (renamer_dialog->model));
@@ -753,12 +819,8 @@ thunar_renamer_dialog_response (GtkDialog *dialog,
   g_object_ref (G_OBJECT (dialog));
 
   /* check if we should rename */
-  if (G_LIKELY (response == GTK_RESPONSE_ACCEPT))
+  if (G_LIKELY (response == GTK_RESPONSE_APPLY))
     {
-      /* hide the close button and show the cancel button */
-      gtk_widget_show (renamer_dialog->cancel_button);
-      gtk_widget_hide (renamer_dialog->close_button);
-
       /* save the current settings */
       thunar_renamer_dialog_save (renamer_dialog);
 
@@ -796,20 +858,6 @@ thunar_renamer_dialog_response (GtkDialog *dialog,
 
       /* release the pairs */
       thunar_renamer_pair_list_free (pair_list);
-
-      /* check if we're in standalone mode */
-      if (thunar_renamer_dialog_get_standalone (renamer_dialog))
-        {
-          /* hide the cancel button again and display the close button */
-          gtk_widget_hide (renamer_dialog->cancel_button);
-          gtk_widget_show (renamer_dialog->close_button);
-        }
-      else
-        {
-          /* hide and destroy the dialog window */
-          gtk_widget_hide (GTK_WIDGET (dialog));
-          gtk_widget_destroy (GTK_WIDGET (dialog));
-        }
     }
   else if (thunar_renamer_progress_running (THUNAR_RENAMER_PROGRESS (renamer_dialog->progress)))
     {
@@ -839,31 +887,31 @@ thunar_renamer_dialog_response (GtkDialog *dialog,
  *
  * Return value: (transfer none): The added #GtkMenuItem
  **/
-static GtkWidget*
+static GtkWidget *
 thunar_renamer_dialog_append_menu_item (ThunarRenamerDialog *renamer_dialog,
                                         GtkMenuShell        *menu,
                                         ThunarRenamerAction  action)
 {
-  gchar                      *label_text;
-  gchar                      *tooltip_text;
-  const XfceGtkActionEntry   *action_entry = get_action_entry (action);
-  GtkWidget                  *item;
+  gchar                    *label_text;
+  gchar                    *tooltip_text;
+  const XfceGtkActionEntry *action_entry = get_action_entry (action);
+  GtkWidget                *item;
 
   _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), NULL);
   _thunar_return_val_if_fail (action_entry != NULL, NULL);
 
   switch (action)
     {
-      case THUNAR_RENAMER_ACTION_REMOVE_FILES:
-        label_text = ngettext ("Remove File", "Remove Files", g_list_length (renamer_dialog->selected_files));
-        tooltip_text = ngettext ("Remove the selected file from the list of files to be renamed",
-                                 "Remove the selected files from the list of files to be renamed", g_list_length (renamer_dialog->selected_files));
-        item = xfce_gtk_image_menu_item_new_from_icon_name (label_text, tooltip_text, action_entry->accel_path, action_entry->callback,
-                                                            G_OBJECT (renamer_dialog), action_entry->menu_item_icon_name, GTK_MENU_SHELL (menu) );
-        gtk_widget_set_sensitive (item, renamer_dialog->selected_files != NULL);
-        return item;
-      default:
-        return xfce_gtk_menu_item_new_from_action_entry (action_entry, G_OBJECT (renamer_dialog), menu);
+    case THUNAR_RENAMER_ACTION_REMOVE_FILES:
+      label_text = ngettext ("Remove File", "Remove Files", g_list_length (renamer_dialog->selected_files));
+      tooltip_text = ngettext ("Remove the selected file from the list of files to be renamed",
+                               "Remove the selected files from the list of files to be renamed", g_list_length (renamer_dialog->selected_files));
+      item = xfce_gtk_image_menu_item_new_from_icon_name (label_text, tooltip_text, action_entry->accel_path, action_entry->callback,
+                                                          G_OBJECT (renamer_dialog), action_entry->menu_item_icon_name, GTK_MENU_SHELL (menu));
+      gtk_widget_set_sensitive (item, renamer_dialog->selected_files != NULL);
+      return item;
+    default:
+      return xfce_gtk_menu_item_new_from_action_entry (action_entry, G_OBJECT (renamer_dialog), menu);
     }
   return NULL;
 }
@@ -884,9 +932,9 @@ thunar_renamer_dialog_context_menu (ThunarRenamerDialog *renamer_dialog)
   g_object_ref (G_OBJECT (renamer_dialog));
 
   menu = g_object_new (THUNAR_TYPE_MENU, "menu-type", THUNAR_MENU_TYPE_CONTEXT_RENAMER,
-                                         "launcher", renamer_dialog->launcher,
-                                         "tab-support-disabled", TRUE,
-                                         "change_directory-support-disabled", TRUE, NULL);
+                       "action_mgr", renamer_dialog->action_mgr,
+                       "tab-support-disabled", TRUE,
+                       "change_directory-support-disabled", TRUE, NULL);
   thunar_menu_add_sections (menu, THUNAR_MENU_SECTION_OPEN | THUNAR_MENU_SECTION_SENDTO);
 
   /* determine the active renamer */
@@ -897,17 +945,17 @@ thunar_renamer_dialog_context_menu (ThunarRenamerDialog *renamer_dialog)
       items = thunarx_renamer_get_menu_items (renamer, GTK_WINDOW (renamer_dialog), renamer_dialog->selected_files);
       if (items != NULL)
         {
-          for(lp = items; lp != NULL; lp = lp->next)
-              thunar_gtk_menu_thunarx_menu_item_new (lp->data, GTK_MENU_SHELL (menu));
+          for (lp = items; lp != NULL; lp = lp->next)
+            thunar_gtk_menu_thunarx_menu_item_new (lp->data, GTK_MENU_SHELL (menu));
           g_list_free (items);
-          xfce_gtk_menu_append_seperator (GTK_MENU_SHELL (menu));
+          xfce_gtk_menu_append_separator (GTK_MENU_SHELL (menu));
         }
     }
   thunar_renamer_dialog_append_menu_item (renamer_dialog, GTK_MENU_SHELL (menu), THUNAR_RENAMER_ACTION_ADD_FILES);
   thunar_renamer_dialog_append_menu_item (renamer_dialog, GTK_MENU_SHELL (menu), THUNAR_RENAMER_ACTION_REMOVE_FILES);
-  xfce_gtk_menu_append_seperator (GTK_MENU_SHELL (menu));
+  xfce_gtk_menu_append_separator (GTK_MENU_SHELL (menu));
   thunar_menu_add_sections (menu, THUNAR_MENU_SECTION_PROPERTIES);
-  thunar_menu_hide_accel_labels (menu);
+  thunar_gtk_menu_hide_accel_labels (GTK_MENU (menu));
   gtk_widget_show_all (GTK_WIDGET (menu));
 
   thunar_gtk_menu_run (GTK_MENU (menu));
@@ -1040,7 +1088,7 @@ trd_video_filter_func (const GtkFileFilterInfo *info,
 
 
 
-static void
+static gboolean
 thunar_renamer_dialog_action_add_files (ThunarRenamerDialog *renamer_dialog)
 {
   GtkFileFilter *filter;
@@ -1050,14 +1098,14 @@ thunar_renamer_dialog_action_add_files (ThunarRenamerDialog *renamer_dialog)
   GSList        *lp;
   gchar         *uri;
 
-  _thunar_return_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog));
+  _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), FALSE);
 
   /* allocate the file chooser */
   chooser = gtk_file_chooser_dialog_new (_("Select files to rename"),
                                          GTK_WINDOW (renamer_dialog),
                                          GTK_FILE_CHOOSER_ACTION_OPEN,
-                                         _("_Cancel"), GTK_RESPONSE_CANCEL,
-                                         _("_Open"), GTK_RESPONSE_ACCEPT,
+                                           _("_Cancel"), GTK_RESPONSE_CANCEL,
+                                             _("_Open"), GTK_RESPONSE_ACCEPT,
                                          NULL);
   gtk_file_chooser_set_local_only (GTK_FILE_CHOOSER (chooser), TRUE);
   gtk_file_chooser_set_select_multiple (GTK_FILE_CHOOSER (chooser), TRUE);
@@ -1140,11 +1188,14 @@ thunar_renamer_dialog_action_add_files (ThunarRenamerDialog *renamer_dialog)
 
   /* cleanup */
   gtk_widget_destroy (chooser);
+
+  /* required in case of shortcut activation, in order to signal that the accel key got handled */
+  return TRUE;
 }
 
 
 
-static void
+static gboolean
 thunar_renamer_dialog_action_remove_files (ThunarRenamerDialog *renamer_dialog)
 {
   GtkTreeRowReference *row;
@@ -1154,7 +1205,7 @@ thunar_renamer_dialog_action_remove_files (ThunarRenamerDialog *renamer_dialog)
   GList               *rows;
   GList               *lp;
 
-  _thunar_return_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog));
+  _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), FALSE);
 
   /* determine the selected rows in the view */
   selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (renamer_dialog->tree_view));
@@ -1185,30 +1236,38 @@ thunar_renamer_dialog_action_remove_files (ThunarRenamerDialog *renamer_dialog)
 
   /* cleanup */
   g_list_free (rows);
+
+  /* required in case of shortcut activation, in order to signal that the accel key got handled */
+  return TRUE;
 }
 
 
 
-static void
+static gboolean
 thunar_renamer_dialog_action_clear (ThunarRenamerDialog *renamer_dialog)
 {
-  _thunar_return_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog));
+  _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), FALSE);
 
   /* just clear the list of files in the model */
   thunar_renamer_model_clear (renamer_dialog->model);
+
+  /* required in case of shortcut activation, in order to signal that the accel key got handled */
+  return TRUE;
 }
 
 
 
-static void
+static gboolean
 thunar_renamer_dialog_action_about (ThunarRenamerDialog *renamer_dialog)
 {
-  _thunar_return_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog));
+  _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), FALSE);
 
   /* just popup the about dialog */
-  thunar_dialogs_show_about (GTK_WINDOW (renamer_dialog), _("Bulk Rename"),
-                             _("Thunar Bulk Rename is a powerful and extensible\n"
+  thunar_dialogs_show_about (GTK_WINDOW (renamer_dialog), _("Bulk Rename"), _("Thunar Bulk Rename is a powerful and extensible\n"
                                "tool to rename multiple files at once."));
+
+  /* required in case of shortcut activation, in order to signal that the accel key got handled */
+  return TRUE;
 }
 
 
@@ -1309,13 +1368,13 @@ thunar_renamer_dialog_drag_data_received (GtkWidget           *tree_view,
                                           guint                timestamp,
                                           ThunarRenamerDialog *renamer_dialog)
 {
-  ThunarFile              *file;
-  GList                   *file_list;
-  GList                   *lp;
-  GtkTreeModel            *model;
-  GtkTreePath             *path;
-  GtkTreeViewDropPosition  drop_pos;
-  gint                     position = -1;
+  ThunarFile             *file;
+  GList                  *file_list;
+  GList                  *lp;
+  GtkTreeModel           *model;
+  GtkTreePath            *path;
+  GtkTreeViewDropPosition drop_pos;
+  gint                    position = -1;
 
   _thunar_return_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog));
   _thunar_return_if_fail (GTK_IS_TREE_VIEW (tree_view));
@@ -1413,12 +1472,12 @@ thunar_renamer_dialog_drag_motion (GtkWidget           *tree_view,
                                    guint                timestamp,
                                    ThunarRenamerDialog *renamer_dialog)
 {
-  GdkAtom                  target;
-  GtkTreeViewDropPosition  position;
-  GtkTreePath             *path;
-  GdkDragAction            action;
-  GtkTreeModel            *model;
-  gint                     n_rows;
+  GdkAtom                 target;
+  GtkTreeViewDropPosition position;
+  GtkTreePath            *path;
+  GdkDragAction           action;
+  GtkTreeModel           *model;
+  gint                    n_rows;
 
   _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), FALSE);
   _thunar_return_val_if_fail (GTK_IS_TREE_VIEW (tree_view), FALSE);
@@ -1501,13 +1560,13 @@ thunar_renamer_dialog_drag_drop (GtkWidget           *tree_view,
                                  guint                timestamp,
                                  ThunarRenamerDialog *renamer_dialog)
 {
-  GdkAtom                  target;
-  GtkTreeSelection        *selection;
-  GtkTreePath             *dst_path;
-  GtkTreeModel            *model;
-  GtkTreeViewDropPosition  drop_pos;
-  gint                     position = -1;
-  GList                   *rows;
+  GdkAtom                 target;
+  GtkTreeSelection       *selection;
+  GtkTreePath            *dst_path;
+  GtkTreeModel           *model;
+  GtkTreeViewDropPosition drop_pos;
+  gint                    position = -1;
+  GList                  *rows;
 
   _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), FALSE);
   _thunar_return_val_if_fail (GTK_IS_TREE_VIEW (tree_view), FALSE);
@@ -1611,7 +1670,7 @@ thunar_renamer_dialog_row_activated (GtkTreeView         *tree_view,
 {
   _thunar_return_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog));
 
-  thunar_launcher_activate_selected_files (renamer_dialog->launcher, THUNAR_LAUNCHER_OPEN_AS_NEW_WINDOW, NULL);
+  thunar_action_manager_activate_selected_files (renamer_dialog->action_mgr, THUNAR_ACTION_MANAGER_OPEN_AS_NEW_WINDOW, NULL);
 }
 
 
@@ -1669,7 +1728,7 @@ thunar_renamer_dialog_selection_changed (GtkTreeSelection    *selection,
  *
  * Return value: the current directory for @renamer_dialog.
  **/
-static ThunarFile*
+static ThunarFile *
 thunar_renamer_dialog_get_current_directory (ThunarRenamerDialog *renamer_dialog)
 {
   _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), NULL);
@@ -1725,7 +1784,7 @@ thunar_renamer_dialog_set_current_directory (ThunarRenamerDialog *renamer_dialog
  *
  * Return value: the list of currently selected files.
  **/
-static GList*
+static GList *
 thunar_renamer_dialog_get_selected_files (ThunarRenamerDialog *renamer_dialog)
 {
   _thunar_return_val_if_fail (THUNAR_IS_RENAMER_DIALOG (renamer_dialog), NULL);
@@ -1780,20 +1839,6 @@ thunar_renamer_dialog_set_standalone (ThunarRenamerDialog *renamer_dialog,
       /* change title to reflect the standalone status */
       gtk_window_set_title (GTK_WINDOW (renamer_dialog), standalone ? _("Bulk Rename - Rename Multiple Files") : _("Rename Multiple Files"));
 
-      /* display the appropriate Cancel/Close button */
-      if (G_UNLIKELY (standalone))
-        {
-          /* standalone has Close button by default */
-          gtk_widget_hide (renamer_dialog->cancel_button);
-          gtk_widget_show (renamer_dialog->close_button);
-        }
-      else
-        {
-          /* else, Cancel button is default */
-          gtk_widget_show (renamer_dialog->cancel_button);
-          gtk_widget_hide (renamer_dialog->close_button);
-        }
-
       /* notify listeners */
       g_object_notify (G_OBJECT (renamer_dialog), "standalone");
     }
@@ -1829,7 +1874,9 @@ thunar_show_renamer_dialog (gpointer     parent,
   GdkScreen         *screen;
   GtkWidget         *dialog;
   GtkWidget         *window = NULL;
+  GtkComboBox       *mode_combo;
   GList             *lp;
+  gboolean           directories_only;
 
   _thunar_return_if_fail (parent == NULL || GDK_IS_SCREEN (parent) || GTK_IS_WIDGET (parent));
 
@@ -1874,6 +1921,17 @@ thunar_show_renamer_dialog (gpointer     parent,
   for (lp = files; lp != NULL; lp = lp->next)
     thunar_renamer_model_append (THUNAR_RENAMER_DIALOG (dialog)->model, lp->data);
 
+  /* if there are only directories selected change the mode to both */
+  directories_only = g_list_length (files) == 0 ? FALSE : TRUE;
+
+  for (lp = files; lp != NULL; lp = lp->next)
+    if (thunar_file_is_directory (THUNAR_FILE (lp->data)) == FALSE)
+      directories_only = FALSE;
+
+  mode_combo = GTK_COMBO_BOX (THUNAR_RENAMER_DIALOG (dialog)->mode_combo);
+  if (directories_only && mode_combo != NULL)
+    gtk_combo_box_set_active (mode_combo, THUNAR_RENAMER_MODE_BOTH);
+
   /* let the application handle the dialog */
   application = thunar_application_get ();
   thunar_application_take_window (application, GTK_WINDOW (dialog));
@@ -1884,3 +1942,40 @@ thunar_show_renamer_dialog (gpointer     parent,
 }
 
 
+
+static gboolean
+thunar_renamer_configure_event (GtkWidget         *widget,
+                                GdkEventConfigure *event)
+{
+  ThunarRenamerDialog *dialog = THUNAR_RENAMER_DIALOG (widget);
+  GtkAllocation        widget_allocation;
+
+  gtk_widget_get_allocation (widget, &widget_allocation);
+
+  /* check if we have a new dimension here */
+  if (widget_allocation.width != event->width || widget_allocation.height != event->height)
+    {
+      /* drop any previous timer source */
+      if (dialog->save_geometry_timer_id != 0)
+        g_source_remove (dialog->save_geometry_timer_id);
+
+      /* check if we should schedule another save timer */
+      if (gtk_widget_get_visible (widget))
+        {
+          /* save the geometry one second after the last configure event */
+          dialog->save_geometry_timer_id = g_timeout_add_seconds_full (G_PRIORITY_LOW, 1, thunar_util_save_geometry_timer,
+                                                                       dialog, thunar_renamer_save_geometry_timer_destroy);
+        }
+    }
+
+  /* let Gtk+ handle the configure event */
+  return (*GTK_WIDGET_CLASS (thunar_renamer_dialog_parent_class)->configure_event) (widget, event);
+}
+
+
+
+static void
+thunar_renamer_save_geometry_timer_destroy (gpointer user_data)
+{
+  THUNAR_RENAMER_DIALOG (user_data)->save_geometry_timer_id = 0;
+}
